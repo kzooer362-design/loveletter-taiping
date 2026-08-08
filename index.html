@@ -832,7 +832,7 @@ body.layout-9-16 .finale-epilogue-text{font-size:24px;line-height:2.1;}
   <div class="ls-percent" id="ls-percent">0%</div>
   <div class="ls-status" id="ls-status">准备中…</div>
   <button class="ls-enter-btn" id="ls-enter-btn">进入游戏</button>
-  <div class="ls-tip">首次加载需下载全部音画资源（约10M），介意请关闭，建议在 Wi-Fi 环境下进行。加载完成后即可离线游玩。</div>
+  <div class="ls-tip">首次加载需下载全部音画资源（约10M），介意请关闭，PC网页版最佳，手机网页效果不佳，建议在 Wi-Fi 环境下进行。加载完成后即可离线游玩。</div>
 </div>
 
 <div id="app">
@@ -1489,8 +1489,8 @@ function getCardQuote(card){
 /* ===== 物料：最终赢家动画文案 ===== */
 const FINALE_DATA = {
   sceneTitle: '喜结良缘',
-  dialogue: '恭喜公主殿下，觅得良婿。',
-  sceneDesc: '喜堂之前，红绸高悬，花连着花，太平公主与才俊并肩而立。',
+  dialogue: '恭喜公主殿下，觅得良人。',
+  sceneDesc: '喜堂之前，太平公主与才俊并肩而立。',
   historyEpilogue: [
     '太平公主，武则天之女，亦是女皇最宠爱的掌上明珠。',
     '少女时嫁于薛绍，夫妻情深，却因薛绍族兄谋反受牵连，被武则天杖杀。',
@@ -2830,7 +2830,7 @@ function showRoundResult(winner, winMode, callback){
 
   let scores = '<div style="margin:10px 0;">';
   for(const p of G.players){
-    scores += `<div style="color:${p.id===winner.id?'var(--gold)':'var(--text-dim)'};margin:4px 0;">${p.name}: ${p.tokens} / ${G.tokensNeeded} 🪿</div>`;
+    scores += `<div style="color:${p.id===winner.id?'var(--gold)':'var(--text-dim)'};margin:4px 0;">${p.name}: ${p.tokens} / ${G.tokensNeeded} ❤</div>`;
   }
   scores += '</div>';
 
