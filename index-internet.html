@@ -1,0 +1,4444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>情书：掌上明珠</title>
+<link rel="icon" href="assets/ui/icon.png">
+<style>
+/* ===== 全局重置 ===== */
+*{margin:0;padding:0;box-sizing:border-box;text-align:left;}
+html,body{width:100%;height:100%;overflow:hidden;font-family:"Microsoft YaHei","Segoe UI",sans-serif;user-select:none;}
+
+/* ===== 主题变量 ===== */
+:root{
+  --gold:#d4af37;
+  --gold-dim:#9a7d28;
+  --purple:#4a2c5e;
+  --purple-deep:#2a1638;
+  --bg-dark:#1a0e22;
+  --bg-card:#2d1b3d;
+  --text-light:#f0e6d3;
+  --text-dim:#a89bb5;
+  --red:#c0392b;
+  --green:#27ae60;
+  --blue:#2980b9;
+}
+
+/* ===== 场景容器：固定画布 + transform scale，按比例缩放永不变形 ===== */
+#app{position:relative;width:100vw;height:100vh;background:#0a0512;overflow:hidden;}
+#stage-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+#stage{position:relative;background:var(--bg-dark);overflow:hidden;box-shadow:0 0 80px rgba(0,0,0,0.85);flex:0 0 auto;}
+/* 16:9 布局：设计尺寸 1920×1080，使用 transform: scale() 适配 stage 尺寸 */
+body.layout-16-9 #stage{
+  width:min(100vw, calc(100vh * 16 / 9));
+  height:min(100vh, calc(100vw * 9 / 16));
+}
+body.layout-9-16 #stage{
+  width:min(100vw, calc(100vh * 9 / 16));
+  height:min(100vh, calc(100vw * 16 / 9));
+}
+/* 内部画布：固定设计尺寸，通过 scale 适配 stage 大小 */
+#canvas{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;}
+body.layout-16-9 #canvas{width:1920px;height:1080px;}
+body.layout-9-16 #canvas{width:900px;height:1600px;}
+/* 所有 scene 都在 canvas 内部，占满 canvas */
+.scene{position:absolute;inset:0;display:none;flex-direction:column;}
+.scene.active{display:flex;}
+
+/* ===== 背景图层 ===== */
+.bg-layer{position:absolute;inset:0;z-index:0;background:radial-gradient(ellipse at 50% 30%,var(--purple) 0%,var(--purple-deep) 50%,var(--bg-dark) 100%);}
+.bg-layer::after{content:"";position:absolute;inset:0;background-image:radial-gradient(circle at 20% 80%,rgba(212,175,55,0.05) 0%,transparent 40%),radial-gradient(circle at 80% 20%,rgba(74,44,94,0.3) 0%,transparent 40%);}
+
+/* ===== 右上按钮栏：在 canvas 内部，用设计稿绝对像素 ===== */
+#top-right-bar{position:absolute;z-index:200;display:flex;align-items:center;gap:16px;}
+body.layout-16-9 #top-right-bar{top:24px;right:36px;}
+body.layout-9-16 #top-right-bar{top:20px;right:20px;gap:10px;}
+/* ===== 布局切换按钮 ===== */
+#layout-toggle{
+  padding:12px 24px;border-radius:12px;
+  background:rgba(0,0,0,0.55);border:2px solid var(--gold-dim);
+  color:var(--gold);cursor:pointer;
+  display:flex;align-items:center;gap:6px;letter-spacing:1px;
+  transition:all .2s;font-weight:bold;white-space:nowrap;
+}
+body.layout-16-9 #layout-toggle{font-size:22px;height:56px;}
+body.layout-9-16 #layout-toggle{font-size:16px;height:44px;padding:8px 14px;gap:4px;}
+#layout-toggle:hover{background:rgba(212,175,55,0.2);border-color:var(--gold);}
+/* ===== 音量控制 ===== */
+#audio-toggle{
+  border-radius:50%;
+  background:rgba(0,0,0,0.55);border:2px solid var(--gold-dim);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:var(--gold);transition:all .2s;
+}
+body.layout-16-9 #audio-toggle{width:56px;height:56px;font-size:28px;}
+body.layout-9-16 #audio-toggle{width:44px;height:44px;font-size:22px;}
+#audio-toggle:hover{background:rgba(212,175,55,0.2);transform:scale(1.1);}
+
+/* ===== 主菜单 ===== */
+#scene-menu{align-items:center;justify-content:center;}
+#scene-menu .menu-content{position:relative;z-index:1;text-align:center;animation:fadeIn 1s ease;}
+#scene-menu .cover-img{width:400px;max-width:80vw;border-radius:12px;box-shadow:0 8px 40px rgba(212,175,55,0.3);margin-bottom:30px;}
+#scene-menu h1{font-size:3rem;color:var(--gold);text-shadow:0 0 20px rgba(212,175,55,0.5);margin-bottom:30px;letter-spacing:4px;text-align:center;}
+.menu-btn{display:block;width:280px;padding:14px;margin:12px auto;background:linear-gradient(135deg,var(--purple),var(--purple-deep));border:2px solid var(--gold-dim);border-radius:8px;color:var(--gold);font-size:1.1rem;cursor:pointer;transition:all .3s;letter-spacing:2px;text-align:center;}
+.menu-btn:hover{background:linear-gradient(135deg,var(--gold-dim),var(--purple));border-color:var(--gold);box-shadow:0 4px 20px rgba(212,175,55,0.4);transform:translateY(-2px);}
+.menu-btn:active{transform:translateY(0);}
+
+/* ===== 玩家数量选择 ===== */
+#scene-setup{align-items:center;justify-content:center;}
+#scene-mp-lobby{align-items:center;justify-content:center;}
+#scene-mp-room{align-items:center;justify-content:center;}
+#scene-rules{align-items:center;justify-content:center;}
+#scene-characters{align-items:center;justify-content:center;}
+.setup-content{position:relative;z-index:1;text-align:center;}
+.setup-content h2{color:var(--gold);font-size:2rem;margin-bottom:30px;text-align:center;}
+.player-count-btns{display:flex;gap:20px;justify-content:center;margin-bottom:30px;}
+.pc-btn{width:100px;height:100px;border-radius:50%;border:3px solid var(--gold-dim);background:var(--bg-card);color:var(--gold);font-size:2rem;cursor:pointer;transition:all .3s;display:flex;align-items:center;justify-content:center;flex-direction:column;}
+.pc-btn span{font-size:0.7rem;margin-top:4px;color:var(--text-dim);}
+.pc-btn:hover,.pc-btn.selected{border-color:var(--gold);background:var(--purple);box-shadow:0 0 20px rgba(212,175,55,0.4);}
+.diff-btns{display:flex;gap:15px;justify-content:center;margin-bottom:30px;}
+.diff-btn{padding:10px 30px;border:2px solid var(--gold-dim);background:var(--bg-card);color:var(--text-light);border-radius:6px;cursor:pointer;transition:all .2s;font-size:0.95rem;}
+.diff-btn:hover,.diff-btn.selected{border-color:var(--gold);color:var(--gold);background:var(--purple);}
+.start-btn{padding:14px 50px;font-size:1.2rem;}
+
+/* ===== 游戏场景 ===== */
+#scene-game{flex-direction:column;}
+
+/* 顶部信息栏 */
+#top-bar{position:relative;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:8px 120px 8px 20px;background:linear-gradient(180deg,rgba(0,0,0,0.6),transparent);}
+#round-info{color:var(--gold);font-size:1rem;text-align:left;}
+#top-actions{display:flex;gap:10px;align-items:center;}
+.top-btn{padding:6px 14px;background:rgba(0,0,0,0.5);border:1px solid var(--gold-dim);border-radius:6px;color:var(--gold);font-size:0.85rem;cursor:pointer;transition:all .2s;text-align:left;}
+.top-btn:hover{background:rgba(212,175,55,0.2);border-color:var(--gold);}
+
+/* 对手区域：内部 grid 横排分列（1/2/3 列），列数由渲染时加 n1/n2/n3 类决定 */
+#opponents-area{position:absolute;z-index:5;pointer-events:none;display:grid;gap:12px;padding:0 20px;align-items:center;justify-items:center;}
+#opponents-area.n1{grid-template-columns:1fr;}
+#opponents-area.n2{grid-template-columns:1fr 1fr;}
+#opponents-area.n3{grid-template-columns:1fr 1fr 1fr;}
+
+.opponent{position:relative;pointer-events:auto;text-align:left;transition:all .3s;display:flex;flex-direction:row;align-items:center;gap:14px;max-width:100%;flex-wrap:wrap;justify-self:center;}
+/* 所有对手统一：头像左 + 信息右（2x2 grid 信息块） */
+.opponent .opp-info{display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;gap:4px 12px;align-items:center;}
+.opponent .opp-name{grid-column:1;grid-row:1;}
+.opponent .opp-status{grid-column:1;grid-row:2;}
+.opponent .opp-cards{grid-column:2;grid-row:1;display:flex;justify-content:flex-start;}
+.opponent .opp-tokens{grid-column:2;grid-row:2;display:flex;justify-content:flex-start;flex-wrap:wrap;max-width:260px;}
+/* grid 列占位 */
+.opponent.pos-g1-1{grid-column:1;}
+.opponent.pos-g2-1{grid-column:1;}
+.opponent.pos-g2-2{grid-column:2;}
+.opponent.pos-g3-1{grid-column:1;}
+.opponent.pos-g3-2{grid-column:2;}
+.opponent.pos-g3-3{grid-column:3;}
+.opponent.active{transform:translateY(-5px);}
+.opponent.active .opp-avatar{box-shadow:0 0 20px var(--gold);border-color:var(--gold);}
+.opponent.eliminated{opacity:0.4;filter:grayscale(1);}
+.opponent.eliminated .opp-avatar{filter:grayscale(1);border-color:var(--text-dim);}
+.opp-avatar{width:108px;height:108px;border-radius:50%;border:3px solid var(--gold-dim);margin:0 0 6px 0;background:var(--bg-card);overflow:hidden;display:flex;align-items:center;justify-content:center;transition:all .3s;flex:0 0 auto;}
+.opp-avatar img{width:100%;height:100%;object-fit:cover;}
+.opp-info{display:flex;flex-direction:column;gap:4px;text-align:left;}
+.opp-name{color:var(--text-light);font-size:0.95rem;font-weight:bold;text-align:center;}
+.opp-status{display:flex;gap:6px;align-items:center;min-height:18px;justify-content:flex-start;}
+/* 宫女守护中：对手 + 玩家通用样式 */
+.opp-protection,.player-shield{
+  color:#7ec6ff;
+  font-size:0.76rem;
+  line-height:1;
+  background:linear-gradient(135deg,rgba(41,128,185,0.3),rgba(52,152,219,0.18));
+  border:1px solid rgba(85,172,238,0.55);
+  padding:4px 10px;
+  border-radius:10px;
+  letter-spacing:1px;
+  text-shadow:0 0 6px rgba(85,172,238,0.5);
+  white-space:nowrap;
+}
+/* 玩家守护中标记：独立放在玩家名字下方（不进入头像内部） */
+.player-meta{gap:6px;}
+.player-shield{
+  display:none; /* 默认不显示，有保护时 render 强制 block */
+  text-align:center;
+  font-size:0.78rem;
+  background:linear-gradient(135deg,rgba(41,128,185,0.42),rgba(52,152,219,0.28));
+  border-color:rgba(147,200,240,0.85);
+  box-shadow:0 2px 10px rgba(52,152,219,0.35);
+}
+.opp-tokens{display:flex;gap:3px;flex-wrap:wrap;max-width:200px;}
+.opp-tokens img{width:18px;height:18px;}
+.opp-tokens .empty{opacity:0.2;}
+.opp-cards{display:flex;gap:4px;flex-wrap:wrap;}
+.opp-card-back{width:54px;height:78px;border-radius:5px;object-fit:cover;border:none;box-shadow:0 2px 6px rgba(0,0,0,0.35);}
+
+/* 中央区域 */
+#center-area{position:relative;z-index:5;display:flex;justify-content:center;align-items:center;gap:40px;flex:1;padding:10px;}
+
+/* 牌库 */
+#deck-area{display:flex;flex-direction:column;align-items:center;gap:8px;}
+#deck-pile{position:relative;width:120px;height:174px;cursor:default;}
+#deck-pile img{width:120px;height:174px;border-radius:8px;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.5);}
+#deck-count{color:var(--text-dim);font-size:0.9rem;text-align:left;}
+.deck-label{color:var(--gold);font-size:0.85rem;letter-spacing:1px;text-align:left;}
+
+/* 弃牌区 */
+#discard-area{display:flex;flex-direction:column;align-items:center;gap:8px;}
+#discard-pile{position:relative;width:120px;height:174px;}
+#discard-pile img{width:120px;height:174px;border-radius:8px;border:none;opacity:0.85;box-shadow:0 4px 12px rgba(0,0,0,0.5);}
+.discard-label{color:var(--gold);font-size:0.85rem;letter-spacing:1px;text-align:left;}
+
+/* ===== 日志（重构版 v2）：单容器、单色键映射、单条高度完全由内容撑开，避免换行后相邻两条重叠 ===== */
+#game-log{
+  width:340px;
+  max-height:280px;
+  background:rgba(10,4,18,0.72);
+  border:1px solid rgba(212,175,55,0.35);
+  border-radius:10px;
+  padding:10px 14px;
+  overflow-y:auto;
+  /* 不用 flex：避免老 Webkit / 特定断点下子元素高度计算偏差 */
+  display:block;
+  box-sizing:border-box;
+  backdrop-filter: blur(2px);
+}
+#game-log::-webkit-scrollbar{width:6px;}
+#game-log::-webkit-scrollbar-thumb{background:rgba(212,175,55,0.45);border-radius:3px;}
+#game-log::-webkit-scrollbar-track{background:transparent;}
+
+#game-log .log-entry{
+  display:block;
+  /* 单条之间固定间距，靠 margin-bottom 而非 gap，跨浏览器最稳 */
+  margin:0 0 8px 0;
+  padding:6px 0 6px 10px;
+  border-left:3px solid #888;
+  border-radius:2px 6px 6px 2px;
+  background:rgba(255,255,255,0.02);
+  font-size:0.88rem;
+  /* 行高用绝对值 px，避免 em 级联放大 */
+  line-height:22px;
+  color:#cfc2b6;
+  word-wrap:break-word;
+  overflow-wrap:break-word;
+  word-break:break-word;
+  white-space:normal;
+  box-sizing:border-box;
+}
+/* 最后一条去掉底部外间距（去掉与滚动条底端的双重 gap） */
+#game-log .log-entry:last-child{
+  margin-bottom:2px;
+}
+/* 不同 speaker 的配色（边框左条 + 文字颜色统一由 JS 行内注入，但这里做后备） */
+#game-log .log-entry[data-speaker="me"]{border-left-color:#2ecc71;}
+#game-log .log-entry[data-speaker="p1"]{border-left-color:#e74c3c;}
+#game-log .log-entry[data-speaker="p2"]{border-left-color:#3498db;}
+#game-log .log-entry[data-speaker="p3"]{border-left-color:#f39c12;}
+#game-log .log-entry[data-speaker="p4"]{border-left-color:#9b59b6;}
+#game-log .log-entry[data-speaker="event"]{border-left-color:#d4af37;}
+#game-log .log-entry[data-speaker="system"]{border-left-color:#8a8099;}
+#card-tracker{width:340px;background:rgba(0,0,0,0.4);border:1px solid var(--gold-dim);border-radius:8px;padding:8px 12px;margin-top:8px;}
+.ct-title{color:var(--gold);font-size:0.78rem;letter-spacing:1px;margin-bottom:6px;text-align:left;}
+.ct-list{display:flex;flex-wrap:wrap;gap:5px 8px;}
+.ct-item{display:inline-flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--text-light);background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.2);border-radius:4px;padding:2px 6px;}
+.ct-item b{color:var(--gold);font-weight:bold;}
+.ct-zero{opacity:0.3;text-decoration:line-through;}
+.log-entry.event{color:var(--gold);}
+
+/* 技能台词气泡 */
+.skill-quote{position:fixed;z-index:200;max-width:260px;padding:10px 16px;background:rgba(20,10,30,0.92);border:1px solid var(--gold);border-radius:10px;color:var(--gold);font-size:0.95rem;line-height:1.6;text-align:center;box-shadow:0 4px 20px rgba(212,175,55,0.3);pointer-events:none;animation:quotePop .4s ease,quoteFade .5s ease 2.2s forwards;}
+.skill-quote::after{content:'';position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid var(--gold);}
+@keyframes quotePop{from{opacity:0;transform:translate(-50%,-8px) scale(0.8);}to{opacity:1;transform:translate(-50%,0) scale(1);}}
+@keyframes quoteFade{to{opacity:0;transform:translate(-50%,-6px) scale(0.95);}}
+
+/* ===== 最终赢家动画（重写版 v2） ===== */
+#finale-overlay{position:fixed;inset:0;z-index:300;display:none;align-items:flex-start;justify-content:center;background:radial-gradient(ellipse at center,rgba(40,6,20,0.97),rgba(0,0,0,0.99));overflow-y:auto;padding:30px 10px;}
+#finale-overlay.show{display:flex;animation:finaleIn 1s ease;}
+@keyframes finaleIn{from{opacity:0;}to{opacity:1;}}
+/* 主容器：纵向居中（内容少时），超长出滚动 */
+.finale-box{text-align:center;max-width:680px;width:100%;padding:20px 20px 40px;animation:finaleRise 1.2s ease;display:flex;flex-direction:column;align-items:center;gap:0;}
+@keyframes finaleRise{from{transform:translateY(30px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+/* 标题 & 文案（都是居中） */
+.finale-title{font-size:2.2rem;color:var(--gold);letter-spacing:6px;margin:0 0 18px;text-shadow:0 0 20px rgba(212,175,55,0.6);animation:finaleGlow 2s ease infinite alternate;}
+@keyframes finaleGlow{from{text-shadow:0 0 10px rgba(212,175,55,0.4);}to{text-shadow:0 0 30px rgba(212,175,55,0.8);}}
+.finale-dialogue{font-size:1.2rem;color:var(--text-light);margin:0 0 10px;letter-spacing:2px;line-height:1.6;}
+.finale-scene{font-size:0.95rem;color:var(--text-dim);margin:0 0 22px;line-height:1.8;}
+/* 舞台容器：承载多图层 —— 背景(wedding) → 人物层(公主左 / 才俊右，下边缘对齐) → flower(最上) */
+.finale-stage{
+  position:relative;width:100%;max-width:640px;margin:0 auto 10px;
+  aspect-ratio: 16 / 10;       /* 喜堂宽高比，可调整 */
+  border-radius:14px;
+  overflow:hidden;
+  box-shadow:0 10px 50px rgba(212,175,55,0.35);
+  background:#2a0a18;
+}
+/* 图层通用 */
+.finale-layer{position:absolute;inset:0;pointer-events:none;}
+/* L1: 喜堂主背景（铺满） */
+.finale-layer.bg{z-index:1;}
+.finale-layer.bg img{width:100%;height:100%;object-fit:cover;display:block;}
+/* L2: 人物层（公主左 + 才俊右，下边缘贴齐舞台底部） */
+.finale-layer.people{z-index:2;}
+.finale-person{
+  position:absolute;bottom:0;height:88%;width:auto;max-width:46%;
+  object-fit:contain;object-position:bottom center;
+  filter:drop-shadow(0 6px 20px rgba(0,0,0,0.55));
+}
+.finale-person.princess{left:2%;}   /* 公主靠左 */
+.finale-person.winner{right:2%;}     /* 才俊靠右 */
+/* L3: 大红花（最上层，居中飘在上方） */
+.finale-layer.flower{z-index:3;display:flex;justify-content:center;align-items:flex-start;padding-top:4%;}
+.finale-flower{
+  width:130px;max-width:28%;height:auto;
+  animation:finaleFlower 2.4s ease infinite alternate;
+  filter:drop-shadow(0 6px 18px rgba(255,120,80,0.6));
+}
+@keyframes finaleFlower{from{transform:scale(1) rotate(-4deg);}to{transform:scale(1.06) rotate(4deg);}}
+/* 才俊/公主对话气泡（在舞台下方） */
+.finale-dialogue-wrap{width:100%;display:flex;flex-direction:column;align-items:center;margin-top:14px;}
+.finale-winner-line{display:inline-block;max-width:92%;padding:10px 18px;margin:6px auto;background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.45);color:#f0e6d3;font-size:1rem;line-height:1.65;border-radius:14px;letter-spacing:1px;}
+.finale-princess-line{display:inline-block;max-width:92%;padding:10px 18px;margin:8px auto 4px;background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.55);color:var(--gold);font-size:1rem;line-height:1.65;border-radius:14px;letter-spacing:1px;}
+/* 通用淡入动画（由 JS 手动加 .in 类触发，不再用硬 delay） */
+.fade-in{opacity:0;transform:translateY(10px);transition:opacity 1s ease, transform 1s ease;}
+.fade-in.in{opacity:1;transform:none;}
+/* === 结局后记（上下结构：在喜堂舞台下方，不清屏） === */
+.finale-epilogue-section{
+  width:100%;max-width:620px;margin:20px auto 0;
+  display:flex;flex-direction:column;align-items:center;
+}
+.finale-epilogue-text{
+  color:var(--text-light);font-size:0.92rem;line-height:2;letter-spacing:1px;
+  padding:20px 24px;background:rgba(0,0,0,0.55);
+  border-left:4px solid var(--gold-dim);border-radius:6px;
+  text-align:left;max-width:95%;width:100%;
+}
+.finale-epilogue-text p{margin:0 0 8px;}
+.finale-epilogue-text p:last-child{margin-bottom:0;color:var(--gold);font-weight:bold;}
+/* 返回按钮（出现在后记里） */
+.finale-btn{
+  margin-top:24px;padding:10px 36px;
+  background:linear-gradient(135deg,var(--purple),var(--purple-deep));
+  border:2px solid var(--gold-dim);border-radius:8px;
+  color:var(--gold);font-size:1rem;cursor:pointer;letter-spacing:2px;
+}
+.finale-btn:hover{border-color:var(--gold);box-shadow:0 4px 18px rgba(212,175,55,0.35);}
+
+/* ===== 音频控制面板（右上角弹出） ===== */
+#audio-panel{
+  position:absolute;top:56px;right:12px;z-index:250;
+  width:240px;padding:14px 16px;
+  background:rgba(18,8,28,0.96);border:1px solid var(--gold-dim);border-radius:10px;
+  box-shadow:0 6px 24px rgba(0,0,0,0.5);
+  display:none;flex-direction:column;gap:10px;
+  backdrop-filter:blur(4px);
+}
+#audio-panel.show{display:flex;animation:panelPop .25s ease;}
+@keyframes panelPop{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+.audio-row{display:flex;align-items:center;gap:8px;}
+.audio-row label{color:var(--text-light);font-size:0.82rem;min-width:56px;}
+.audio-row input[type=range]{flex:1;accent-color:var(--gold);}
+.audio-row .vol-val{color:var(--gold);font-size:0.78rem;min-width:34px;text-align:right;}
+.audio-toggle{
+  width:34px;height:20px;border-radius:10px;background:#555;position:relative;cursor:pointer;
+  transition:background .2s;border:none;padding:0;
+}
+.audio-toggle::after{
+  content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+  background:#fff;transition:left .2s, background .2s;
+}
+.audio-toggle.on{background:var(--gold-dim);}
+.audio-toggle.on::after{left:16px;background:var(--gold);}
+
+/* 玩家区域 */
+#player-area{position:relative;z-index:10;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px;padding:8px 20px 20px;background:linear-gradient(0deg,rgba(0,0,0,0.5),transparent);flex:0 0 auto;}
+#player-action{min-height:0;width:100%;display:flex;justify-content:center;align-items:flex-end;margin-bottom:40px;padding-top:6px;}
+#player-action:empty{display:none;}
+#player-hand-row{display:flex;justify-content:center;align-items:flex-end;gap:32px;width:100%;}
+#player-info{display:flex;align-items:center;gap:12px;}
+#player-info .player-avatar{width:96px;height:96px;border-radius:50%;border:3px solid var(--gold);overflow:hidden;transition:all .3s;flex:0 0 auto;}
+#player-info .player-avatar img{width:100%;height:100%;object-fit:cover;}
+#player-info .player-avatar.eliminated{filter:grayscale(1);opacity:0.4;border-color:var(--text-dim);}
+.player-meta{display:flex;flex-direction:column;gap:4px;}
+#player-info .player-label{color:var(--gold);font-size:1rem;font-weight:bold;text-align:center;}
+.player-tokens{display:flex;gap:3px;align-items:center;flex-wrap:wrap;max-width:120px;}
+.player-tokens img{width:20px;height:20px;}
+.player-tokens .empty{opacity:0.2;}
+
+/* 手牌 */
+#player-hand{display:flex;gap:14px;justify-content:center;perspective:800px;}
+.hand-card{position:relative;width:210px;height:304px;margin-top:16px;cursor:pointer;transition:all .3s ease;transform-style:preserve-3d;}
+.hand-card:hover{transform:translateY(-22px) scale(1.05);}
+.hand-card.selected{transform:translateY(-32px) scale(1.08);filter:drop-shadow(0 0 12px var(--gold));}
+.hand-card img{width:100%;height:100%;border-radius:8px;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.6);}
+.hand-card .card-tooltip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:10px;background:var(--bg-card);border:1px solid var(--gold);border-radius:8px;padding:10px 14px;width:240px;font-size:0.85rem;color:var(--text-light);z-index:60;pointer-events:none;text-align:left;box-shadow:0 6px 18px rgba(0,0,0,0.7);line-height:1.5;}
+.hand-card .card-tooltip .ct-name{color:var(--gold);font-weight:bold;margin-bottom:4px;font-size:0.95rem;text-align:left;}
+.hand-card .card-tooltip .ct-desc{color:var(--text-light);text-align:left;}
+.hand-card:hover .card-tooltip{display:block;}
+
+/* 出牌操作栏（卡牌上方） */
+.action-bar{display:flex;align-items:center;gap:14px;background:rgba(0,0,0,0.55);border:1px solid var(--gold-dim);border-radius:10px;padding:10px 16px;text-align:left;max-width:95%;}
+.action-info{flex:1;min-width:0;text-align:left;overflow-wrap:break-word;word-wrap:break-word;word-break:break-word;}
+.action-name{color:var(--gold);font-weight:bold;font-size:0.95rem;margin-bottom:4px;text-align:left;}
+.action-desc{color:var(--text-light);font-size:0.8rem;line-height:1.4;text-align:left;max-width:480px;overflow-wrap:break-word;word-wrap:break-word;word-break:break-word;}
+.action-btn{padding:10px 24px;border-radius:8px;cursor:pointer;font-size:0.95rem;transition:all .2s;border:2px solid;flex:0 0 auto;text-align:left;}
+.play-btn{background:linear-gradient(135deg,var(--gold-dim),var(--purple));border-color:var(--gold);color:var(--gold);}
+.play-btn:hover{box-shadow:0 4px 16px rgba(212,175,55,0.4);transform:translateY(-1px);}
+.cancel-btn{background:var(--red);border-color:var(--red);color:white;}
+.cancel-btn:hover{background:#a93226;}
+
+/* 出牌动画区域 */
+#play-zone{position:absolute;inset:0;z-index:50;display:none;align-items:center;justify-content:center;pointer-events:none;}
+#play-zone.show{display:flex;}
+#play-zone .played-card{width:150px;height:218px;border-radius:8px;border:3px solid var(--gold);box-shadow:0 8px 30px rgba(212,175,55,0.5);animation:playCard .6s ease;}
+
+/* ===== 选择面板 ===== */
+#action-panel{position:absolute;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);}
+#action-panel.show{display:flex;}
+.panel-content{background:var(--bg-card);border:2px solid var(--gold-dim);border-radius:12px;padding:30px;max-width:560px;text-align:left;}
+.panel-title{color:var(--gold);font-size:1.3rem;margin-bottom:20px;text-align:left;}
+.target-grid{display:flex;gap:24px;justify-content:center;margin-bottom:20px;}
+.target-cell{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.target-btn{width:100px;height:100px;border-radius:50%;border:3px solid var(--gold-dim);background:var(--bg-dark);cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;padding:0;}
+.target-btn:hover{border-color:var(--gold);box-shadow:0 0 18px var(--gold);transform:scale(1.05);}
+.target-btn img{width:90px;height:90px;border-radius:50%;}
+.target-btn.disabled{opacity:0.3;pointer-events:none;}
+.target-cell .tname{font-size:0.85rem;color:var(--text-light);font-weight:bold;text-align:left;}
+.guess-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.guess-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px;border:2px solid var(--gold-dim);background:var(--bg-dark);border-radius:8px;cursor:pointer;transition:all .2s;text-align:left;}
+.guess-btn:hover{border-color:var(--gold);box-shadow:0 0 10px var(--gold);}
+.guess-btn img{width:70px;height:102px;border-radius:4px;}
+.guess-btn .gname{font-size:0.8rem;color:var(--text-light);text-align:left;}
+.guess-btn .gval{font-size:0.7rem;color:var(--gold);text-align:left;}
+.panel-cancel{margin-top:10px;padding:8px 24px;background:var(--red);border:none;border-radius:6px;color:white;cursor:pointer;font-size:0.9rem;}
+
+/* 人物查看网格 */
+#scene-characters{align-items:center;justify-content:flex-start;overflow-y:auto;padding:30px 20px;}
+#scene-characters .setup-content{max-width:1000px;width:100%;text-align:center;}
+.char-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:20px;justify-items:center;}
+.char-cell{background:var(--bg-card);border:2px solid var(--gold-dim);border-radius:10px;padding:14px;text-align:center;transition:all .2s;cursor:pointer;width:100%;}
+.char-cell:hover{border-color:var(--gold);box-shadow:0 4px 18px rgba(212,175,55,0.3);}
+.char-cell img{width:110px;height:160px;border-radius:6px;margin-bottom:8px;}
+.char-cell .cc-name{color:var(--gold);font-size:1.1rem;font-weight:bold;margin-bottom:4px;text-align:center;}
+.char-cell .cc-val{color:var(--text-dim);font-size:0.9rem;margin-bottom:6px;text-align:center;}
+.char-cell .cc-desc{color:var(--text-light);font-size:0.85rem;line-height:1.6;text-align:left;}
+
+/* 卡牌放大弹窗 */
+#card-detail-overlay{position:absolute;inset:0;z-index:250;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);cursor:pointer;}
+#card-detail-overlay.show{display:flex;}
+#card-detail-overlay .cd-inner{display:flex;flex-direction:column;align-items:center;gap:16px;text-align:left;}
+#card-detail-overlay .cd-img{width:280px;height:406px;border-radius:10px;border:3px solid var(--gold);box-shadow:0 8px 40px rgba(212,175,55,0.5);}
+#card-detail-overlay .cd-name{color:var(--gold);font-size:1.5rem;font-weight:bold;text-align:left;}
+#card-detail-overlay .cd-val{color:var(--text-dim);font-size:0.95rem;text-align:left;}
+#card-detail-overlay .cd-desc{color:var(--text-light);font-size:0.95rem;line-height:1.6;text-align:left;max-width:320px;}
+#card-detail-overlay .cd-hint{color:var(--text-dim);font-size:0.8rem;margin-top:8px;text-align:left;}
+
+/* 返回按钮 */
+.menu-btn.back-btn{background:linear-gradient(135deg,#3a2a4a,#2a1638);border-color:var(--text-dim);color:var(--text-light);width:200px;padding:10px;font-size:0.95rem;}
+.menu-btn.back-btn:hover{border-color:var(--gold-dim);color:var(--gold);}
+
+/* ===== 回合提示 ===== */
+#turn-indicator{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:80;font-size:2rem;color:var(--gold);text-shadow:0 0 20px rgba(212,175,55,0.8);letter-spacing:4px;opacity:0;pointer-events:none;}
+#turn-indicator.show{animation:turnShow 1.5s ease;}
+
+/* ===== 弹窗 ===== */
+#modal{position:absolute;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);}
+#modal.show{display:flex;}
+.modal-content{background:var(--bg-card);border:2px solid var(--gold);border-radius:16px;padding:40px;text-align:left;max-width:480px;animation:modalIn .4s ease;}
+.modal-content h2{color:var(--gold);font-size:2rem;margin-bottom:16px;text-align:left;}
+.modal-content p{color:var(--text-light);font-size:1rem;margin-bottom:24px;line-height:1.6;text-align:left;}
+.modal-content .reveal-card{width:150px;height:218px;border-radius:8px;border:2px solid var(--gold);margin:0 auto 16px;display:block;}
+.modal-btn{padding:12px 40px;background:linear-gradient(135deg,var(--gold-dim),var(--purple));border:2px solid var(--gold);border-radius:8px;color:var(--gold);font-size:1rem;cursor:pointer;transition:all .2s;letter-spacing:2px;text-align:left;}
+.modal-btn:hover{box-shadow:0 4px 20px rgba(212,175,55,0.4);}
+
+/* ===== 动画 ===== */
+@keyframes fadeIn{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+@keyframes playCard{0%{transform:scale(0.5) translateY(100px);opacity:0;}50%{transform:scale(1.1);}100%{transform:scale(1) translateY(0);opacity:1;}}
+@keyframes turnShow{0%{opacity:0;transform:translate(-50%,-50%) scale(0.5);}30%{opacity:1;transform:translate(-50%,-50%) scale(1);}70%{opacity:1;}100%{opacity:0;transform:translate(-50%,-50%) scale(1.2);}}
+@keyframes modalIn{from{opacity:0;transform:scale(0.8);}to{opacity:1;transform:scale(1);}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,0.4);}50%{box-shadow:0 0 0 10px rgba(212,175,55,0);}}
+@keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-5px);}75%{transform:translateX(5px);}}
+
+/* =====================================================================
+ * 16:9 布局（1920×1080 设计稿，最大化 UI）
+ * ===================================================================== */
+body.layout-16-9 #canvas{font-size:16px;}
+/* 主菜单 */
+body.layout-16-9 #scene-menu .cover-img{width:520px;margin-bottom:40px;}
+body.layout-16-9 #scene-menu h1{font-size:72px;margin-bottom:44px;letter-spacing:8px;}
+body.layout-16-9 .menu-btn{width:420px;padding:22px;margin:16px auto;font-size:26px;border-width:3px;border-radius:12px;}
+body.layout-16-9 .setup-content h2{font-size:52px;margin-bottom:40px;}
+body.layout-16-9 .pc-btn{width:160px;height:160px;border-width:4px;font-size:56px;border-radius:50%;}
+body.layout-16-9 .pc-btn span{font-size:16px;margin-top:6px;}
+body.layout-16-9 .player-count-btns{gap:40px;margin-bottom:40px;}
+body.layout-16-9 .diff-btns{gap:24px;margin-bottom:40px;}
+body.layout-16-9 .diff-btn{padding:16px 44px;font-size:22px;border-width:3px;border-radius:10px;}
+body.layout-16-9 .start-btn{padding:22px 70px;font-size:28px;}
+
+/* 顶部信息栏 */
+body.layout-16-9 #top-bar{padding:14px 280px 14px 36px;}
+body.layout-16-9 #round-info{font-size:24px;}
+body.layout-16-9 .top-btn{padding:10px 22px;font-size:18px;border-width:2px;border-radius:10px;}
+body.layout-16-9 #top-actions{gap:16px;}
+
+/* ============================================================
+   16:9 布局 — 明确分带（左栏日志 + 中央上/中/下 三带），互不重叠
+   - 顶部栏：top-bar 高约 100px
+   - 左栏（日志）：left:20px, width:340px, top:100px, bottom:20px
+   - 中央主带（左起 380px 往右）：
+       • 对手区：top:100px, height:260px
+       • 中心（牌库/弃牌）：top:360px, bottom:400px
+       • 玩家区：bottom:0, height:380px
+============================================================ */
+/* 对手区：中央主带上部 */
+body.layout-16-9 #opponents-area{top:100px;left:380px;right:20px;height:260px;padding:0 20px;gap:20px;}
+body.layout-16-9 .opp-avatar{width:120px;height:120px;border-width:4px;margin:0;}
+body.layout-16-9 .opponent{gap:16px;max-width:100%;}
+body.layout-16-9 .opponent .opp-info{gap:6px 14px;}
+body.layout-16-9 .opp-name{font-size:20px;}
+body.layout-16-9 .opp-card-back{width:58px;height:84px;border-radius:6px;}
+body.layout-16-9 .opp-tokens img{width:24px;height:24px;}
+body.layout-16-9 .opponent .opp-tokens{max-width:260px;gap:4px;}
+body.layout-16-9 .opponent .opp-cards{gap:4px;}
+body.layout-16-9 .opp-protection{font-size:14px;padding:6px 14px;border-radius:12px;letter-spacing:2px;}
+body.layout-16-9 .player-shield{font-size:16px;padding:8px 16px;border-radius:12px;}
+
+/* 中央区域：牌库/弃牌（中央主带中部） */
+body.layout-16-9 #center-area{position:absolute;top:360px;left:380px;right:20px;bottom:400px;gap:70px;padding:10px;align-items:center;justify-content:center;flex-direction:row;}
+body.layout-16-9 #deck-pile,
+body.layout-16-9 #deck-pile img,
+body.layout-16-9 #discard-pile,
+body.layout-16-9 #discard-pile img{width:180px;height:260px;border-radius:12px;}
+body.layout-16-9 .deck-label,body.layout-16-9 .discard-label{font-size:18px;letter-spacing:2px;}
+body.layout-16-9 #deck-count{font-size:18px;}
+body.layout-16-9 #deck-area,body.layout-16-9 #discard-area{gap:12px;}
+
+/* 玩家区域：底部 380px 高（中央主带底部） */
+body.layout-16-9 #player-area{position:absolute;left:380px;right:20px;bottom:0;height:380px;padding:8px 20px 16px;gap:10px;}
+body.layout-16-9 #player-hand-row{gap:22px;}
+body.layout-16-9 .hand-card{width:200px;height:290px;margin-top:12px;border-width:3px;border-radius:14px;}
+body.layout-16-9 .hand-card:hover{transform:translateY(-20px) scale(1.05);}
+body.layout-16-9 .hand-card.selected{transform:translateY(-30px) scale(1.08);box-shadow:0 8px 32px rgba(212,175,55,0.7);}
+body.layout-16-9 .hand-card .hc-rank{font-size:30px;}
+body.layout-16-9 .hand-card .hc-name{font-size:18px;}
+body.layout-16-9 #player-info .player-avatar{width:110px;height:110px;border-width:3px;}
+body.layout-16-9 .player-tokens img{width:26px;height:26px;}
+body.layout-16-9 #player-label{font-size:20px;}
+body.layout-16-9 #player-action{margin-bottom:10px;padding-top:4px;}
+
+/* 行动栏 */
+body.layout-16-9 .action-bar{padding:12px 20px;gap:16px;border-width:2px;border-radius:12px;}
+body.layout-16-9 .action-info{font-size:20px;}
+body.layout-16-9 .action-desc{font-size:18px;max-width:520px;}
+body.layout-16-9 .play-btn,.cancel-btn{padding:10px 24px;font-size:18px;border-width:2px;border-radius:8px;}
+
+/* 游戏日志：左栏（独立，与对手/中心/玩家水平错开） */
+body.layout-16-9 #game-log{display:block;position:absolute;left:20px;top:100px;bottom:20px;width:340px;max-height:none;font-size:15px;padding:12px 16px;border-width:2px;border-radius:12px;}
+body.layout-16-9 #game-log .log-entry{font-size:15px;line-height:24px;padding:5px 0 5px 10px;margin:0 0 8px 0;}
+body.layout-16-9 #game-log h3{font-size:18px;margin-bottom:8px;}
+
+/* 角色选择 & 猜牌 */
+body.layout-16-9 .char-grid{grid-template-columns:repeat(4,1fr);gap:20px;}
+body.layout-16-9 .char-cell{padding:16px;border-radius:14px;}
+body.layout-16-9 .char-cell img{width:180px;height:260px;}
+body.layout-16-9 .char-cell .cc-name{font-size:1.4rem;}
+body.layout-16-9 .char-cell .cc-val{font-size:1.1rem;}
+body.layout-16-9 .char-cell .cc-desc{font-size:1rem;line-height:1.7;}
+body.layout-16-9 .guess-grid{grid-template-columns:repeat(4,1fr);gap:12px;}
+body.layout-16-9 .guess-card{padding:10px;border-radius:10px;}
+body.layout-16-9 .guess-card img{width:110px;height:160px;}
+
+/* 音频面板 */
+body.layout-16-9 #audio-panel{top:96px;right:36px;width:340px;padding:20px 24px;border-radius:14px;border-width:2px;gap:14px;}
+body.layout-16-9 #audio-panel label{font-size:18px;}
+body.layout-16-9 .audio-toggle{width:42px;height:24px;}
+body.layout-16-9 .audio-toggle::after{width:20px;height:20px;}
+body.layout-16-9 .audio-toggle.on::after{left:calc(100% - 22px);}
+
+/* Modal */
+body.layout-16-9 .modal-content{padding:40px 50px;max-width:720px;border-radius:16px;border-width:3px;}
+body.layout-16-9 .modal-content h2{font-size:36px;margin-bottom:20px;}
+body.layout-16-9 .modal-content p{margin-bottom:22px;font-size:20px;line-height:1.7;}
+body.layout-16-9 .modal-btn{padding:14px 42px;font-size:20px;border-radius:10px;border-width:3px;}
+body.layout-16-9 .modal-content .reveal-card{width:220px;height:320px;border-radius:14px;}
+body.layout-16-9 .target-list{gap:14px;}
+body.layout-16-9 .target-btn{padding:14px 28px;font-size:20px;border-width:3px;border-radius:10px;}
+body.layout-16-9 .card-detail{max-width:520px;padding:28px 24px;border-radius:16px;}
+body.layout-16-9 .card-detail .cd-img{width:280px;height:406px;}
+body.layout-16-9 .card-detail .cd-name{font-size:28px;margin:12px 0 8px;}
+body.layout-16-9 .card-detail .cd-meta{font-size:18px;margin-bottom:12px;}
+body.layout-16-9 .card-detail .cd-desc{font-size:18px;line-height:1.7;}
+body.layout-16-9 .target-hint{font-size:16px;padding:10px 16px;}
+
+/* Finale overlay */
+body.layout-16-9 .finale-title{font-size:80px;}
+body.layout-16-9 .finale-dialogue{font-size:28px;}
+body.layout-16-9 .finale-stage{width:1100px;height:620px;margin:20px 0;border-width:4px;border-radius:18px;}
+body.layout-16-9 .finale-scene{font-size:24px;margin:10px 0;}
+body.layout-16-9 .finale-winner-line,body.layout-16-9 .finale-princess-line{font-size:22px;padding:16px 24px;border-radius:14px;}
+body.layout-16-9 .finale-dialogue-wrap{gap:18px;width:900px;margin:14px auto;}
+body.layout-16-9 .finale-epilogue-text{font-size:22px;line-height:2;margin:20px auto;max-width:1000px;}
+body.layout-16-9 .finale-btn{padding:16px 50px;font-size:22px;border-radius:12px;border-width:3px;}
+
+/* =====================================================================
+ * 9:16 竖屏布局（900×1600 设计稿，最大化 UI，不遮挡）
+ * 布局思路：
+ *   - 顶部：回合信息 + 顶栏按钮（留出右上按钮栏空间）
+ *   - 对手区：上半部分横向排列或顶部集中（因为竖屏更窄）
+ *   - 中间：牌库 + 弃牌（并排居中）
+ *   - 玩家手牌 + 玩家信息：中下部
+ *   - 底部：行动栏
+ * ===================================================================== */
+body.layout-9-16 #canvas{font-size:14px;}
+/* 主菜单 */
+body.layout-9-16 #scene-menu .cover-img{width:560px;border-radius:20px;margin-bottom:60px;}
+body.layout-9-16 #scene-menu h1{font-size:64px;margin-bottom:60px;letter-spacing:8px;}
+body.layout-9-16 .menu-btn{width:640px;padding:30px;margin:20px auto;font-size:30px;border-radius:16px;border-width:4px;letter-spacing:4px;}
+body.layout-9-16 .setup-content h2{font-size:48px;margin-bottom:50px;}
+body.layout-9-16 .player-count-btns{gap:30px;margin-bottom:50px;flex-wrap:wrap;}
+body.layout-9-16 .pc-btn{width:150px;height:150px;border-width:4px;font-size:48px;}
+body.layout-9-16 .pc-btn span{font-size:16px;margin-top:6px;}
+body.layout-9-16 .diff-btns{gap:20px;margin-bottom:50px;flex-wrap:wrap;}
+body.layout-9-16 .diff-btn{padding:18px 36px;font-size:24px;border-width:3px;border-radius:12px;}
+body.layout-9-16 .start-btn{padding:28px 80px;font-size:32px;}
+
+/* 顶部信息栏 */
+body.layout-9-16 #top-bar{padding:20px 180px 16px 24px;}
+body.layout-9-16 #round-info{font-size:24px;}
+body.layout-9-16 .top-btn{padding:10px 18px;font-size:18px;border-radius:10px;border-width:2px;}
+body.layout-9-16 #top-actions{gap:10px;}
+
+/* 9:16 游戏场景：垂直分区，各区块绝对定位占独立带，互不遮挡 */
+/* 对手区域：顶部带 100-530。根据对手数设置不同 grid：
+   n1 单列 / n2 两列并排 / n3 两行（第1行1个跨2列，第2行2个并排）
+*/
+body.layout-9-16 #opponents-area{top:100px;left:16px;right:16px;height:430px;gap:14px;padding:0;}
+body.layout-9-16 #opponents-area.n1{grid-template-columns:1fr;}
+body.layout-9-16 #opponents-area.n2{grid-template-columns:1fr 1fr;}
+body.layout-9-16 #opponents-area.n3{grid-template-columns:1fr 1fr;grid-template-rows:auto auto;}
+/* n3：第一个对手跨两列居中（横排） */
+body.layout-9-16 #opponents-area.n3 .pos-g3-1{grid-column:1 / span 2;}
+body.layout-9-16 #opponents-area.n3 .pos-g3-2{grid-column:1;}
+body.layout-9-16 #opponents-area.n3 .pos-g3-3{grid-column:2;}
+
+/* 竖屏：单列的对手(n1 单个) / n3 的第一个跨列对手 → 横排（头像左+信息右） */
+body.layout-9-16 #opponents-area.n1 .opponent,
+body.layout-9-16 #opponents-area.n3 .pos-g3-1{flex-direction:row;gap:14px;justify-self:center;}
+/* 多列的对手(n2 两个 / n3 第二行两个) → 竖排（头像上+信息下） */
+body.layout-9-16 #opponents-area.n2 .opponent,
+body.layout-9-16 #opponents-area.n3 .pos-g3-2,
+body.layout-9-16 #opponents-area.n3 .pos-g3-3{flex-direction:column;align-items:center;gap:6px;}
+
+body.layout-9-16 .opp-avatar{width:130px;height:130px;border-width:4px;margin:0;}
+body.layout-9-16 #opponents-area.n1 .opp-avatar,
+body.layout-9-16 #opponents-area.n3 .pos-g3-1 .opp-avatar{width:110px;height:110px;}
+body.layout-9-16 .opp-name{font-size:20px;}
+body.layout-9-16 .opp-card-back{width:60px;height:86px;border-radius:6px;}
+body.layout-9-16 .opp-tokens img{width:22px;height:22px;}
+body.layout-9-16 .opponent .opp-tokens{max-width:240px;gap:4px;}
+body.layout-9-16 .opponent .opp-cards{gap:5px;justify-content:center;}
+/* 竖排对手的信息居中对齐 */
+body.layout-9-16 #opponents-area.n2 .opp-info,
+body.layout-9-16 #opponents-area.n3 .pos-g3-2 .opp-info,
+body.layout-9-16 #opponents-area.n3 .pos-g3-3 .opp-info{display:flex;flex-direction:column;align-items:center;gap:4px;}
+body.layout-9-16 #opponents-area.n2 .opp-status,
+body.layout-9-16 #opponents-area.n3 .pos-g3-2 .opp-status,
+body.layout-9-16 #opponents-area.n3 .pos-g3-3 .opp-status{text-align:center;}
+body.layout-9-16 .opp-protection{font-size:14px;padding:6px 12px;border-radius:10px;}
+body.layout-9-16 .player-shield{font-size:16px;padding:6px 14px;border-radius:10px;}
+
+/* 中央区域：牌库+弃牌并排，固定带 540-840 */
+body.layout-9-16 #center-area{position:absolute;top:540px;left:0;right:0;height:300px;flex:none;flex-direction:row;gap:60px;padding:12px;justify-content:center;align-items:center;}
+body.layout-9-16 #deck-pile,
+body.layout-9-16 #deck-pile img,
+body.layout-9-16 #discard-pile,
+body.layout-9-16 #discard-pile img{width:160px;height:232px;border-radius:10px;}
+body.layout-9-16 .deck-label,body.layout-9-16 .discard-label{font-size:18px;letter-spacing:2px;}
+body.layout-9-16 #deck-count{font-size:18px;}
+body.layout-9-16 #deck-area,body.layout-9-16 #discard-area{gap:8px;}
+
+/* 游戏日志：独立带 860-1080（scene-game 下一级元素，直接相对 #stage 定位） */
+body.layout-9-16 #game-log{display:block;position:absolute;left:24px;right:24px;top:860px;height:220px;max-height:220px;width:auto;font-size:16px;padding:12px 16px;border-width:2px;border-radius:12px;}
+body.layout-9-16 #game-log h3{font-size:20px;margin-bottom:8px;}
+body.layout-9-16 #game-log .log-entry{font-size:15px;line-height:24px;padding:5px 0 5px 10px;margin:0 0 8px 0;}
+
+/* 玩家区域：底部带 1090-1600 */
+body.layout-9-16 #player-area{position:absolute;bottom:0;left:0;right:0;padding:10px 20px 16px;gap:6px;flex:none;}
+body.layout-9-16 #player-hand-row{gap:20px;justify-content:center;}
+body.layout-9-16 .hand-card{width:200px;height:290px;margin-top:10px;border-width:4px;border-radius:14px;}
+body.layout-9-16 .hand-card:hover{transform:translateY(-18px) scale(1.05);}
+body.layout-9-16 .hand-card.selected{transform:translateY(-28px) scale(1.08);box-shadow:0 8px 32px rgba(212,175,55,0.6);}
+body.layout-9-16 .hand-card .hc-rank{font-size:30px;}
+body.layout-9-16 .hand-card .hc-name{font-size:18px;}
+body.layout-9-16 #player-info .player-avatar{width:120px;height:120px;border-width:4px;}
+body.layout-9-16 .player-tokens img{width:24px;height:24px;}
+body.layout-9-16 #player-label{font-size:20px;}
+body.layout-9-16 #player-action{margin-bottom:40px;padding-top:8px;}
+
+/* 行动栏（竖屏允许换行） */
+body.layout-9-16 .action-bar{padding:14px 16px;gap:12px;border-width:3px;border-radius:12px;flex-wrap:wrap;}
+body.layout-9-16 .action-info{font-size:20px;}
+body.layout-9-16 .action-desc{font-size:18px;max-width:380px;}
+body.layout-9-16 .play-btn,.cancel-btn{padding:10px 24px;font-size:20px;border-width:3px;border-radius:10px;}
+
+/* 角色选择 & 猜牌（竖屏缩减为 2/3 列） */
+body.layout-9-16 .char-grid{grid-template-columns:repeat(2,1fr);gap:14px;}
+body.layout-9-16 .char-cell{padding:12px;border-radius:10px;}
+body.layout-9-16 .char-cell img{width:200px;height:290px;}
+body.layout-9-16 .char-cell .cc-name{font-size:1.3rem;}
+body.layout-9-16 .char-cell .cc-val{font-size:1rem;}
+body.layout-9-16 .char-cell .cc-desc{font-size:0.9rem;line-height:1.6;}
+body.layout-9-16 .guess-grid{grid-template-columns:repeat(3,1fr);gap:10px;}
+body.layout-9-16 .guess-card{padding:8px;border-radius:8px;}
+body.layout-9-16 .guess-card img{width:110px;height:160px;}
+
+/* 音频面板 */
+body.layout-9-16 #audio-panel{top:86px;right:20px;width:320px;padding:18px 20px;border-radius:14px;border-width:2px;gap:12px;}
+body.layout-9-16 #audio-panel label{font-size:18px;}
+body.layout-9-16 .audio-toggle{width:40px;height:22px;}
+body.layout-9-16 .audio-toggle::after{width:18px;height:18px;}
+body.layout-9-16 .audio-toggle.on::after{left:calc(100% - 20px);}
+
+/* Modal */
+body.layout-9-16 .modal-content{padding:32px 30px;max-width:640px;border-radius:14px;border-width:3px;}
+body.layout-9-16 .modal-content h2{font-size:32px;margin-bottom:18px;}
+body.layout-9-16 .modal-content p{margin-bottom:20px;font-size:20px;line-height:1.7;}
+body.layout-9-16 .modal-btn{padding:14px 38px;font-size:20px;border-radius:10px;border-width:3px;}
+body.layout-9-16 .modal-content .reveal-card{width:200px;height:290px;border-radius:12px;}
+body.layout-9-16 .target-list{gap:12px;flex-direction:column;align-items:stretch;}
+body.layout-9-16 .target-btn{padding:14px 24px;font-size:20px;border-width:3px;border-radius:10px;}
+body.layout-9-16 .card-detail{max-width:620px;padding:24px 20px;border-radius:14px;}
+body.layout-9-16 .card-detail .cd-img{width:260px;height:376px;}
+body.layout-9-16 .card-detail .cd-name{font-size:26px;margin:10px 0 6px;}
+body.layout-9-16 .card-detail .cd-meta{font-size:18px;margin-bottom:10px;}
+body.layout-9-16 .card-detail .cd-desc{font-size:18px;line-height:1.7;}
+body.layout-9-16 .target-hint{font-size:16px;padding:10px 16px;}
+
+/* Finale overlay */
+body.layout-9-16 .finale-title{font-size:64px;}
+body.layout-9-16 .finale-dialogue{font-size:26px;}
+body.layout-9-16 .finale-scene{font-size:22px;margin:10px 0;}
+body.layout-9-16 .finale-stage{width:720px;height:800px;margin:20px 0;border-width:4px;border-radius:16px;}
+body.layout-9-16 .finale-winner-line,body.layout-9-16 .finale-princess-line{font-size:20px;padding:14px 20px;border-radius:12px;}
+body.layout-9-16 .finale-dialogue-wrap{gap:16px;width:720px;margin:12px auto;}
+body.layout-9-16 .finale-epilogue-text{font-size:20px;line-height:2;margin:20px auto;max-width:720px;}
+body.layout-9-16 .finale-btn{padding:16px 46px;font-size:22px;border-radius:12px;border-width:3px;}
+</style>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</head>
+<body class="layout-16-9">
+
+<div id="app">
+  <div id="stage-wrap">
+    <div id="stage">
+      <div id="canvas">
+      <!-- 背景 -->
+      <div class="bg-layer"></div>
+
+      <!-- 右上按钮栏：布局切换 + 音频设置（canvas 内部，不会出画） -->
+      <div id="top-right-bar">
+        <button id="layout-toggle" onclick="toggleLayout()">⛶ 竖版</button>
+        <button id="audio-toggle" title="音频设置">🔊</button>
+      </div>
+      <!-- 音频控制面板（BGM/Voice 独立开关 + 音量滑块） -->
+      <div id="audio-panel">
+        <div class="audio-row">
+          <label>总开关</label>
+          <button class="audio-toggle on" id="master-toggle" title="总静音"></button>
+        </div>
+        <div class="audio-row">
+          <label>BGM</label>
+          <button class="audio-toggle on" id="bgm-toggle" title="BGM开关"></button>
+          <input type="range" id="bgm-vol" min="0" max="100" value="30">
+          <span class="vol-val" id="bgm-vol-val">30%</span>
+        </div>
+        <div class="audio-row">
+          <label>配音</label>
+          <button class="audio-toggle on" id="voice-toggle" title="配音开关"></button>
+          <input type="range" id="voice-vol" min="0" max="100" value="90">
+          <span class="vol-val" id="voice-vol-val">90%</span>
+        </div>
+        <div class="audio-row">
+          <label>音效</label>
+          <button class="audio-toggle on" id="sfx-toggle" title="音效开关"></button>
+          <input type="range" id="sfx-vol" min="0" max="100" value="50">
+          <span class="vol-val" id="sfx-vol-val">50%</span>
+        </div>
+      </div>
+
+  <!-- 主菜单 -->
+  <div id="scene-menu" class="scene active">
+    <div class="menu-content">
+      <img src="assets/ui/cover.png" class="cover-img" alt="Love Letter">
+      <h1>情书：掌上明珠</h1>
+      <button class="menu-btn" onclick="showSetup()">开始游戏</button>
+      <button class="menu-btn" onclick="MPUI.showLobby()">联机对战</button>
+      <button class="menu-btn" onclick="showCharacters()">查看人物</button>
+      <button class="menu-btn" onclick="showRules()">游戏规则</button>
+    </div>
+  </div>
+
+  <!-- 设置场景 -->
+  <div id="scene-setup" class="scene">
+    <div class="setup-content">
+      <h2>选择对手数量</h2>
+      <div class="player-count-btns">
+        <div class="pc-btn" data-count="1" onclick="selectPlayerCount(1)">1<span>vs 1 AI</span></div>
+        <div class="pc-btn" data-count="2" onclick="selectPlayerCount(2)">2<span>vs 2 AI</span></div>
+        <div class="pc-btn" data-count="3" onclick="selectPlayerCount(3)">3<span>vs 3 AI</span></div>
+      </div>
+      <h2>AI难度</h2>
+      <div class="diff-btns">
+        <div class="diff-btn" data-diff="easy" onclick="selectDifficulty('easy')">简单</div>
+        <div class="diff-btn selected" data-diff="normal" onclick="selectDifficulty('normal')">普通</div>
+        <div class="diff-btn" data-diff="hard" onclick="selectDifficulty('hard')">困难</div>
+      </div>
+      <button class="menu-btn start-btn" onclick="startGame()">开始对局</button>
+      <button class="menu-btn back-btn" onclick="showMenu()">返回主菜单</button>
+    </div>
+  </div>
+
+  <!-- 人物查看场景 -->
+  <div id="scene-characters" class="scene">
+    <div class="setup-content" style="max-width:1000px;">
+      <h2 style="text-align:center;margin-bottom:20px;">人物牌一览</h2>
+      <div id="char-grid" class="char-grid"></div>
+      <button class="menu-btn back-btn" onclick="showMenu()" style="margin-top:20px;">返回主菜单</button>
+    </div>
+  </div>
+
+  <!-- 规则场景 -->
+  <div id="scene-rules" class="scene">
+    <div class="setup-content" style="max-width:680px;line-height:2.2;padding:30px 40px;text-align:center;margin:auto;">
+      <h2 style="text-align:center;margin-bottom:20px;">游戏规则</h2>
+      <p style="color:var(--text-light);font-size:1.05rem;text-align:left;padding:0 20px;">
+        <b style="color:var(--gold)">目标：</b>通过淘汰对手或牌库耗尽时持有最高点数牌来赢得定情玉佩。先达到目标玉佩数者获胜。<br>
+        <b style="color:var(--gold)">2人7玉佩 / 3人5玉佩 / 4人4玉佩</b><br><br>
+        <b style="color:var(--gold)">回合流程：</b>抽1张牌 → 选择1张打出 → 执行效果<br><br>
+        <b style="color:var(--gold)">卡牌效果：</b><br>
+        <b style="color:var(--red)">1 金吾卫×5</b> — 猜测目标手牌（不能猜金吾卫），猜中则目标淘汰<br>
+        <b style="color:var(--red)">2 方士×2</b> — 查看目标玩家手牌<br>
+        <b style="color:var(--red)">3 宰相×2</b> — 与目标比拼手牌，点数低者淘汰<br>
+        <b style="color:var(--red)">4 宫女×2</b> — 获得保护，直到下回合不受攻击<br>
+        <b style="color:var(--red)">5 皇子×2</b> — 目标弃牌并重新抽牌（弃太平公主则死）<br>
+        <b style="color:var(--red)">6 皇帝×1</b> — 与目标交换手牌<br>
+        <b style="color:var(--red)">7 女官×1</b> — 同时持有皇帝或皇子时必须打出<br>
+        <b style="color:var(--red)">8 太平公主×1</b> — 弃掉太平公主立即淘汰<br>
+      </p>
+      <div style="text-align:center;">
+        <button class="menu-btn back-btn" onclick="showMenu()" style="margin-top:24px;">返回主菜单</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 联机对战：创建/加入房间 -->
+  <div id="scene-mp-lobby" class="scene">
+    <div class="setup-content" style="max-width:560px;text-align:center;margin:auto;">
+      <h2 style="text-align:center;margin-bottom:16px;">联机对战 (互联网版)</h2>
+
+      <!-- ====== 互联网 PeerJS 模式 ====== -->
+      <div id="mp-panel-peerjs" style="text-align:center;">
+        <p style="color:var(--text-light);font-size:0.9rem;margin-bottom:16px;text-align:center;">
+          房主创建房间，获得 6 位房间码；朋友在互联网另一端输入房间码即可加入。
+        </p>
+        <div style="display:flex;gap:16px;justify-content:center;margin-bottom:16px;">
+          <button class="menu-btn" onclick="MPUI.createRoom()" style="flex:1;">创建房间</button>
+          <button class="menu-btn" onclick="MPUI.showJoinForm()" style="flex:1;">加入房间</button>
+        </div>
+        <div id="mp-join-form" style="display:none;max-width:360px;margin:0 auto;">
+          <input type="text" id="mp-room-input" placeholder="输入 6 位房间号" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--gold-dim);background:rgba(0,0,0,0.4);color:var(--text-light);font-size:1rem;margin-bottom:12px;text-align:center;">
+          <button class="menu-btn start-btn" onclick="MPUI.joinRoom()" style="width:100%;">加入</button>
+        </div>
+      </div>
+
+      <div id="mp-status" style="text-align:center;color:var(--text-light);font-size:0.9rem;margin-top:12px;"></div>
+      <div style="text-align:center;">
+        <button class="menu-btn back-btn" onclick="showMenu()" style="margin-top:20px;">返回主菜单</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 联机对战：房间大厅 -->
+  <div id="scene-mp-room" class="scene">
+    <div class="setup-content" style="max-width:600px;margin:auto;">
+      <h2 style="text-align:center;margin-bottom:8px;">房间大厅</h2>
+      <div id="mp-room-code-display" style="text-align:center;margin-bottom:20px;"></div>
+      <div style="margin-bottom:16px;">
+        <label style="color:var(--text-light);font-size:0.9rem;">你的名字</label>
+        <input type="text" id="mp-my-name" maxlength="10" placeholder="玩家1" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid var(--gold-dim);background:rgba(0,0,0,0.4);color:var(--text-light);font-size:0.95rem;margin-top:4px;" oninput="MPUI.updateName(this.value)">
+      </div>
+      <h3 style="text-align:center;color:var(--gold);margin-bottom:10px;">玩家列表</h3>
+      <div id="mp-player-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;"></div>
+      <div id="mp-host-controls" style="display:none;">
+        <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:16px;">
+          <label style="color:var(--text-light);font-size:0.9rem;">NPC数量</label>
+          <div style="display:flex;gap:8px;">
+            <button class="diff-btn" data-npc="0" onclick="MPUI.selectNPC(0)">0</button>
+            <button class="diff-btn selected" data-npc="1" onclick="MPUI.selectNPC(1)">1</button>
+            <button class="diff-btn" data-npc="2" onclick="MPUI.selectNPC(2)">2</button>
+            <button class="diff-btn" data-npc="3" onclick="MPUI.selectNPC(3)">3</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:center;">
+          <button class="menu-btn start-btn" onclick="MPUI.startOnlineGame()">开始游戏</button>
+        </div>
+      </div>
+      <div id="mp-client-wait" style="display:none;text-align:center;color:var(--text-light);">等待房主开始游戏...</div>
+      <button class="menu-btn back-btn" onclick="MPUI.leaveRoom()" style="margin-top:20px;">离开房间</button>
+    </div>
+  </div>
+
+  <!-- 游戏场景 -->
+  <div id="scene-game" class="scene">
+    <!-- 顶部信息 -->
+    <div id="top-bar">
+      <div id="round-info">第 <span id="round-num">1</span> 回合</div>
+      <div id="top-actions">
+        <button class="top-btn" onclick="confirmExitGame()" title="返回主菜单">☰ 菜单</button>
+      </div>
+    </div>
+
+    <!-- 对手区域（绝对定位，按人数分布） -->
+    <div id="opponents-area"></div>
+
+    <!-- 游戏日志（scene-game 一级子元素，方便作为独立左栏定位） -->
+    <div id="game-log"></div>
+
+    <!-- 中央区域（仅放牌库/弃牌/卡牌追踪） -->
+    <div id="center-area">
+      <div id="deck-area">
+        <div id="deck-pile"><img src="picture/back.png" alt="牌库"></div>
+        <div id="deck-count">剩余 0 张</div>
+        <div class="deck-label">牌库</div>
+      </div>
+
+      <div id="discard-area">
+        <div id="discard-pile"></div>
+        <div class="discard-label">弃牌堆</div>
+      </div>
+
+      <div id="card-tracker"></div>
+    </div>
+
+    <!-- 玩家区域 -->
+    <div id="player-area">
+      <div id="player-action"></div>
+      <div id="player-hand-row">
+        <div id="player-info">
+          <div class="player-avatar" id="player-avatar-box"><img id="player-avatar-img" src="assets/ui/icon1.png" alt="你"></div>
+          <div class="player-meta">
+            <span class="player-label" id="player-label">你</span>
+            <div class="player-tokens" id="player-tokens"></div>
+            <div class="player-shield" id="player-shield"></div>
+          </div>
+        </div>
+        <div id="player-hand"></div>
+      </div>
+    </div>
+
+    <!-- 出牌动画 -->
+    <div id="play-zone"><img class="played-card" src="" alt=""></div>
+
+    <!-- 选择面板 -->
+    <div id="action-panel">
+      <div class="panel-content">
+        <div class="panel-title" id="panel-title"></div>
+        <div id="panel-body"></div>
+      </div>
+    </div>
+
+    <!-- 回合提示 -->
+    <div id="turn-indicator"></div>
+
+    <!-- 弹窗 -->
+    <div id="modal">
+      <div class="modal-content" id="modal-content"></div>
+    </div>
+
+    <!-- 卡牌放大弹窗 -->
+    <div id="card-detail-overlay" onclick="hideCardDetail()">
+      <div class="cd-inner" id="card-detail-inner"></div>
+    </div>
+
+    <!-- 最终赢家动画（两阶段：喜堂 → 历史后记） -->
+    <div id="finale-overlay">
+      <!-- === 阶段一：喜结良缘 + 喜堂舞台 + 对话 === -->
+      <div class="finale-box" id="finale-main-stage">
+        <div class="finale-title fade-in" id="finale-title">喜结良缘</div>
+        <div class="finale-dialogue fade-in" id="finale-dialogue">恭喜公主殿下，觅得良人。</div>
+        <div class="finale-scene fade-in" id="finale-scene">喜堂之前，太平公主与才俊并肩而立。</div>
+        <!-- 多图层舞台：wedding背景(L1) → 公主左/才俊右(L2) → 大红花(L3最上) -->
+        <div class="finale-stage fade-in" id="finale-stage">
+          <!-- L1: 喜堂主背景 -->
+          <div class="finale-layer bg">
+            <img id="finale-bg-img" src="" alt="喜堂">
+          </div>
+          <!-- L2: 人物层（公主左、才俊右，下边缘都贴舞台底部） -->
+          <div class="finale-layer people">
+            <img class="finale-person princess" id="finale-princess-img" src="" alt="太平公主">
+            <img class="finale-person winner" id="finale-winner-img" src="" alt="才俊">
+          </div>
+          <!-- L3: 大红花（最上图层） -->
+          <div class="finale-layer flower">
+            <img class="finale-flower" id="finale-flower" src="picture/wedding/wedding_flower.png" alt="喜花"
+                 onerror="this.style.display='none'">
+          </div>
+        </div>
+        <!-- 对话气泡（才俊一句 → 公主一句，顺序淡入） -->
+        <div class="finale-dialogue-wrap">
+          <div class="finale-winner-line fade-in" id="finale-winner-line"></div>
+          <div class="finale-princess-line fade-in" id="finale-princess-line"></div>
+        </div>
+        <!-- 历史后记（上下结构：在喜堂下方淡入，不清屏） -->
+        <div class="finale-epilogue-section fade-in" id="finale-epilogue-section">
+          <div class="finale-epilogue-text" id="finale-epilogue-text"></div>
+          <button class="finale-btn" onclick="closeFinale()">返回主菜单</button>
+        </div>
+      </div>
+    </div>
+    </div><!-- /#canvas -->
+    </div><!-- /#stage -->
+  </div><!-- /#stage-wrap -->
+</div><!-- /#app -->
+
+<script>
+/* ============================================================
+ * Love Letter 桌游 · 完整实现
+ * 单文件 HTML — 含 AI 对战、卡牌效果、动画、音效
+ * ============================================================ */
+
+/* ===== 音频系统（重写版 v2：独立音量 + 独立开关 + voice 结束回调） ===== */
+const Audio = {
+  bgm: null,
+  currentVoice: null,
+  currentBgmName: null,
+  currentBgm: null,
+  /* 音量：0~1，和滑块 0~100 对应 */
+  bgmVolume: 0.3,
+  voiceVolume: 0.9,
+  sfxVolume: 0.5,
+  /* 独立开关 */
+  masterMuted: false,
+  bgmMuted: false,
+  voiceMuted: false,
+  sfxMuted: false,
+  /* voice 文件存在性缓存 */
+  _voiceCache: Object.create(null),
+  init(){
+    this.currentVoice = null;
+    this.currentBgmName = null;
+  },
+  /* === BGM === */
+  /* game 模式：从 game1~4 中随机选一首播放，结束后自动换下一首（列表随机循环） */
+  _gameBgmList: ['game1','game2','game3','game4'],
+  _gameBgmIndex: -1,
+  _pickNextGameBgm(){
+    // 随机选一首，尽量不重复当前
+    let idx;
+    if(this._gameBgmList.length <= 1){ idx = 0; }
+    else {
+      do { idx = Math.floor(Math.random() * this._gameBgmList.length); }
+      while(idx === this._gameBgmIndex);
+    }
+    this._gameBgmIndex = idx;
+    return this._gameBgmList[idx];
+  },
+  playBgm(name){
+    if(this.masterMuted || this.bgmMuted) return;
+    if(this.currentBgm === name) return;
+    this.stopBgm(true);
+    if(name === 'game'){
+      // 游戏BGM：随机列表循环
+      const file = this._pickNextGameBgm();
+      const a = new Audio_(`assets/audio/bgm/${file}.mp3`);
+      a.loop = false; // 不单曲循环，播完换下一首
+      a.volume = this.bgmVolume;
+      a.addEventListener('ended', () => {
+        if(this.currentBgm !== 'game') return; // 已切到其他BGM则不续播
+        const next = this._pickNextGameBgm();
+        const a2 = new Audio_(`assets/audio/bgm/${next}.mp3`);
+        a2.loop = false;
+        a2.volume = this.bgmVolume;
+        a2.addEventListener('ended', arguments.callee, { once:true });
+        a2.play().catch(() => {});
+        this.bgm = a2;
+      });
+      a.play().then(() => console.log('[BGM] OK', file))
+              .catch(err => console.warn('[BGM] play failed', file, err));
+      this.bgm = a;
+      this.currentBgm = name;
+      this.currentBgmName = name;
+    } else {
+      const a = new Audio_(`assets/audio/bgm/${name}.mp3`);
+      a.loop = true;
+      a.volume = this.bgmVolume;
+      a.play().then(() => console.log('[BGM] OK', name))
+             .catch(err => console.warn('[BGM] play failed', name, err));
+      this.bgm = a;
+      this.currentBgm = name;
+      this.currentBgmName = name;
+    }
+  },
+  /* stopBgm 真正静音+暂停+清空（避免旧BGM和新BGM并行）
+     immediate=true 表示立刻用最强制止，用于切换到 wedding_bgm 场景 */
+  stopBgm(immediate=false){
+    if(!this.bgm) return;
+    try {
+      this.bgm.volume = 0;                 // 先置音量0，感官上立即停止
+      this.bgm.pause();                    // 再暂停
+      if(immediate){
+        try { this.bgm.currentTime = this.bgm.duration || 0; } catch(e){}  // 强制跳到结尾
+      }
+    } catch(e){}
+    this.bgm = null;
+    this.currentBgm = null;
+  },
+  /* === SFX 音效 === */
+  sfx(name){
+    if(this.masterMuted || this.sfxMuted) return;
+    try {
+      const a = new Audio_(`assets/audio/sfx/${name}.mp3`);
+      a.volume = this.sfxVolume;
+      a.play().catch(err => console.warn('[SFX] play failed', name, err));
+    } catch(e){}
+  },
+  /* voice 文件存在性检测 */
+  _checkVoice(name){
+    const src = `assets/audio/voice/${name}.mp3`;
+    if(this._voiceCache[name] !== undefined) return Promise.resolve(this._voiceCache[name]);
+    return new Promise(resolve => {
+      try {
+        const a = new Audio_();
+        a.preload = 'auto';
+        const done = (ok) => {
+          this._voiceCache[name] = ok;
+          resolve(ok);
+          try { a.removeAttribute('src'); } catch(e){}
+        };
+        a.addEventListener('canplaythrough', () => done(true), { once:true });
+        a.addEventListener('error', () => done(false), { once:true });
+        a.src = src;
+        setTimeout(() => { if(this._voiceCache[name] === undefined) done(false); }, 1500);
+      } catch(e){
+        resolve(false);
+      }
+    });
+  },
+  /* === VOICE 配音 ===
+     参数：
+       name    : 文件名（不含 .mp3）
+       delayMs : 延迟播放毫秒
+       onEnded : 播放完毕自然结束时的回调（被打断不触发）
+     注意：如果 master/voice 静音了，onEnded 仍然会触发（让后续流程不卡死）*/
+  voice(name, delayMs=0, onEnded=null){
+    if(this.masterMuted || this.voiceMuted){
+      // 静音情况下仍然"假装"播完，给 onEnded 一个合理延迟，避免后续流程立即冲出来
+      if(onEnded){ setTimeout(onEnded, Math.max(1400, delayMs + 1400)); }
+      return;
+    }
+    const playIt = async () => {
+      // 先把上一段 voice 彻底打断
+      try {
+        if(this.currentVoice){
+          try { this.currentVoice.onended = null; } catch(e){}
+          try { this.currentVoice.pause(); } catch(e){}
+          this.currentVoice = null;
+        }
+      } catch(e){}
+      try {
+        const exists = await this._checkVoice(name);
+        if(!exists){
+          console.warn('[VOICE] SKIP (file not found)', name);
+          if(onEnded){ setTimeout(onEnded, 800); }  // 文件不存在也给兜底回调
+          return;
+        }
+        const a = new Audio_(`assets/audio/voice/${name}.mp3`);
+        a.volume = this.voiceVolume;
+        let endedFired = false;
+        const fireEnded = () => {
+          if(endedFired) return;
+          endedFired = true;
+          try { a.onended = null; } catch(e){}
+          if(onEnded){ try { onEnded(); } catch(e){} }
+        };
+        a.addEventListener('ended', fireEnded, { once:true });
+        a.play().then(() => {
+          console.log('[VOICE] OK', name);
+        }).catch(err => {
+          console.warn('[VOICE] FAIL', name, err);
+          fireEnded();   // 播放失败直接触发回调，不让流程卡死
+        });
+        this.currentVoice = a;
+      } catch(e){
+        console.warn('[VOICE] EXCEPTION', name, e);
+        if(onEnded){ setTimeout(onEnded, 500); }
+      }
+    };
+    if(delayMs > 0){
+      setTimeout(playIt, delayMs);
+    } else {
+      playIt();
+    }
+  },
+  /* 婚礼结尾BGM —— 确保旧BGM 100% 被覆盖（不会并行） */
+  playWeddingBgm(){
+    this.stopBgm(true);   // 立即、强制停止旧BGM
+    // 再加一个 80ms 的安全延时，确保浏览器把旧的 audio tag 完全释放
+    setTimeout(() => {
+      if(this.masterMuted || this.bgmMuted) return;
+      const a = new Audio_('assets/audio/bgm/wedding_bgm.mp3');
+      a.loop = true;
+      a.volume = this.bgmVolume;
+      a.play().then(() => console.log('[WEDDING BGM] OK'))
+              .catch(err => console.warn('[WEDDING BGM] play failed', err));
+      this.bgm = a;
+      this.currentBgm = 'wedding_bgm';
+      this.currentBgmName = 'wedding_bgm';
+    }, 80);
+  },
+  /* === 总静音切换（保留兼容旧调用） —— 现在打开/关闭音频控制面板 === */
+  togglePanel(force){
+    const panel = document.getElementById('audio-panel');
+    if(!panel) return;
+    const show = (typeof force === 'boolean') ? force : !panel.classList.contains('show');
+    panel.classList.toggle('show', show);
+  },
+  /* 总静音一键开关（对应面板里的"总开关"） */
+  setMasterMuted(muted){
+    this.masterMuted = muted;
+    if(muted){
+      this.stopBgm(true);
+      try { if(this.currentVoice){ this.currentVoice.pause(); this.currentVoice = null; } } catch(e){}
+      document.getElementById('audio-toggle').textContent = '🔇';
+    } else {
+      document.getElementById('audio-toggle').textContent = '🔊';
+      if(this.currentBgmName){ this.playBgm(this.currentBgmName); }
+    }
+    this._syncToggleUI();
+  },
+  /* 单独 BGM 开关 */
+  setBgmMuted(muted){
+    this.bgmMuted = muted;
+    if(muted){ this.stopBgm(true); }
+    else if(!this.masterMuted && this.currentBgmName){ this.playBgm(this.currentBgmName); }
+    this._syncToggleUI();
+  },
+  setVoiceMuted(muted){ this.voiceMuted = muted; this._syncToggleUI(); },
+  setSfxMuted(muted){ this.sfxMuted = muted; this._syncToggleUI(); },
+  /* 音量设置（0~100 滑块值 → 内部 0~1） */
+  setBgmVolume(pct){
+    this.bgmVolume = Math.max(0, Math.min(1, pct / 100));
+    if(this.bgm){ try { this.bgm.volume = this.bgmVolume; } catch(e){} }
+    this._syncVolumeUI();
+  },
+  setVoiceVolume(pct){ this.voiceVolume = Math.max(0, Math.min(1, pct / 100)); this._syncVolumeUI(); },
+  setSfxVolume(pct){ this.sfxVolume = Math.max(0, Math.min(1, pct / 100)); this._syncVolumeUI(); },
+  /* 把 4 个独立开关状态同步到 UI toggle 按钮的 on/off 样式 */
+  _syncToggleUI(){
+    const apply = (id, cond) => {
+      const el = document.getElementById(id);
+      if(el) el.classList.toggle('on', !cond);   // muted=true → 去掉 on 类（显示关闭）
+    };
+    apply('master-toggle', this.masterMuted);
+    apply('bgm-toggle', this.bgmMuted);
+    apply('voice-toggle', this.voiceMuted);
+    apply('sfx-toggle', this.sfxMuted);
+    document.getElementById('audio-toggle').textContent = this.masterMuted ? '🔇' : '🔊';
+  },
+  /* 把当前音量值同步到面板滑块和百分比文字 */
+  _syncVolumeUI(){
+    const map = [
+      ['bgm-vol',   'bgm-vol-val',   this.bgmVolume   * 100],
+      ['voice-vol', 'voice-vol-val', this.voiceVolume * 100],
+      ['sfx-vol',   'sfx-vol-val',   this.sfxVolume   * 100],
+    ];
+    for(const [rangeId, valId, pct] of map){
+      const r = document.getElementById(rangeId);
+      const v = document.getElementById(valId);
+      const p = Math.round(pct);
+      if(r) r.value = String(p);
+      if(v) v.textContent = p + '%';
+    }
+  },
+  /* 绑定音频控制面板所有交互（DOMContentLoaded 后调用一次） */
+  bindPanelUI(){
+    const toggleBtn = document.getElementById('audio-toggle');
+    if(toggleBtn){
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.togglePanel();
+      });
+    }
+    // 点击别处关闭面板
+    document.addEventListener('click', (e) => {
+      const panel = document.getElementById('audio-panel');
+      const at = document.getElementById('audio-toggle');
+      if(!panel || !panel.classList.contains('show')) return;
+      if(panel.contains(e.target) || (at && at.contains(e.target))) return;
+      panel.classList.remove('show');
+    });
+    // 4 个开关（on=开启，点击→关闭=muted=true）
+    const bindToggle = (id, setter) => {
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.addEventListener('click', () => setter(el.classList.contains('on')));
+    };
+    bindToggle('master-toggle', (m) => this.setMasterMuted(m));
+    bindToggle('bgm-toggle',    (m) => this.setBgmMuted(m));
+    bindToggle('voice-toggle',  (m) => this.setVoiceMuted(m));
+    bindToggle('sfx-toggle',    (m) => this.setSfxMuted(m));
+    // 3 个音量滑块
+    const bindRange = (rangeId, valId, setter) => {
+      const r = document.getElementById(rangeId);
+      const v = document.getElementById(valId);
+      if(!r || !v) return;
+      r.addEventListener('input', () => {
+        const p = parseInt(r.value || '0', 10);
+        setter(p);
+        v.textContent = p + '%';
+      });
+    };
+    bindRange('bgm-vol',   'bgm-vol-val',   (p) => this.setBgmVolume(p));
+    bindRange('voice-vol', 'voice-vol-val', (p) => this.setVoiceVolume(p));
+    bindRange('sfx-vol',   'sfx-vol-val',   (p) => this.setSfxVolume(p));
+    // 初始化 UI 外观
+    this._syncToggleUI();
+    this._syncVolumeUI();
+  },
+  /* 兼容旧：原来 Audio.toggle() 是一键总静音。现在保留别名，默认总静音切换。 */
+  toggle(){
+    this.setMasterMuted(!this.masterMuted);
+  }
+};
+// 用 <audio> 元素别名避免和全局 Audio 冲突
+const Audio_ = window.Audio;
+window.AudioSystem = Audio;
+
+/* ===== 卡牌定义 ===== */
+/* quotes 为台词数组，随机播放；count>1 的角色若需区分不同个体在 variants 里按 variant 索引指定台词/配音名
+   voiceName 为配音文件名（不含 .mp3 扩展名），对应 assets/audio/voice/<voiceName>.mp3 */
+const CARD_DEFS = {
+  guard:    { value:1, name:'金吾卫',   cn:'金吾卫',   count:5,
+              desc:'说出一个非金吾卫牌名称并选择一位玩家，若此玩家拥有此牌，则被淘汰',
+              quotes:[
+                { text:'奉旨拿人，休要遁形！',         voiceName:'guard_1' },
+                { text:'殿下有令，不得放一人过关！',   voiceName:'guard_2' },
+                { text:'公主府也是你敢闯的？',         voiceName:'guard_3' }
+              ] },
+  priest:   { value:2, name:'方士',   cn:'方士',   count:2,
+              desc:'查看另一位玩家的手牌',
+              /* 只录了 1 条配音，两个方士共用同一台词+配音 */
+              quotes:[ { text:'观你气数，一览无余。', voiceName:'priest_1' } ] },
+  baron:    { value:3, name:'宰相',   cn:'宰相',   count:2,
+              desc:'你和另一位玩家比手牌点数，点数较小的玩家将被淘汰',
+              variants:{
+                1:{ text:'你要和本官较量吗？',     voiceName:'baron_1' }, /* 狄仁杰 */
+                2:{ text:'朝堂论道，一较高下。',   voiceName:'baron_2' }  /* 张柬之 */
+              } },
+  handmaid: { value:4, name:'宫女',   cn:'宫女',   count:2,
+              desc:'直到你的下一个回合，忽略其他玩家的卡牌对你的影响',
+              variants:{
+                1:{ text:'奉旨清场，闲杂退散。', voiceName:'handmaid_1' },
+                2:{ text:'奉旨守门，闲人免进。', voiceName:'handmaid_2' }
+              } },
+  prince:   { value:5, name:'皇子',   cn:'皇子',   count:2,
+              desc:'选择另一位玩家，此玩家弃一张牌，然后摸一张牌',
+              variants:{
+                1:{ text:'奉旨行事，弃旧迎新。', voiceName:'prince_1' }, /* 李旦 */
+                2:{ text:'哼，不愿舍，何来得？', voiceName:'prince_2' }
+              } },
+  king:     { value:6, name:'皇帝',   cn:'皇帝',   count:1,
+              desc:'选择另一位玩家，将你的手牌与之交换',
+              quotes:[ { text:'朕意已决，物归原主。', voiceName:'king_1' } ] },
+  countess: { value:7, name:'女官', cn:'女官', count:1,
+              desc:'若你的手牌中有皇帝或皇子时，你必须打出女官牌',
+              quotes:[ { text:'宫中规矩，不得逾越。', voiceName:'countess_1' } ] },
+  princess: { value:8, name:'太平公主',   cn:'太平公主',   count:1,
+              desc:'若你将公主牌打出或弃置，你将被淘汰',
+              quotes:[ { text:'本宫在此，谁敢造次！', voiceName:'princess_1' } ] }
+};
+
+/* 从 CARD_DEFS 中获取一张具体卡牌的台词+配音名（考虑 variant 与随机多条） */
+function getCardQuote(card){
+  if(!card) return null;
+  const def = CARD_DEFS[card.type];
+  if(!def) return null;
+  // 优先按 variant 走 variants 映射
+  if(def.variants && card.variant && def.variants[card.variant]){
+    return def.variants[card.variant];
+  }
+  // 否则用 quotes 数组随机挑一条（count 多的金吾卫有5条不同台词）
+  if(def.quotes && def.quotes.length){
+    const idx = Math.floor(Math.random() * def.quotes.length);
+    return def.quotes[idx];
+  }
+  // 兼容旧的 quote 字段（兜底）
+  if(def.quote){
+    return { text: def.quote, voiceName: null };
+  }
+  return null;
+}
+
+/* ===== 物料：最终赢家动画文案 ===== */
+const FINALE_DATA = {
+  sceneTitle: '喜结良缘',
+  dialogue: '恭喜公主殿下，觅得良婿。',
+  sceneDesc: '喜堂之前，红绸高悬，花连着花，太平公主与才俊并肩而立。',
+  historyEpilogue: [
+    '太平公主，武则天之女，亦是女皇最宠爱的掌上明珠。',
+    '少女时嫁于薛绍，夫妻情深，却因薛绍族兄谋反受牵连，被武则天杖杀。',
+    '后改嫁武攸暨，逐渐走入权力中心。',
+    '公主府中，宰相崔湜、高戬，以及僧人惠范等人相随，成为她的重要助力。',
+    '武则天时代，狄仁杰辅政多年，于公元700年病逝。',
+    '两年后，张柬之联合众臣发动"神龙政变"，武则天退位，李显复唐，是为唐中宗。',
+    '然而李显懦弱，韦皇后掌控朝政，并欲重走武则天之路。',
+    '公元710年，太平公主联合临淄王李隆基发动"唐隆政变"，诛杀韦后与安乐公主。李旦复位，是为唐睿宗。',
+    '随后，李旦禅位于李隆基，后者即位，是为唐玄宗。',
+    '昔日联手平乱的姑侄，最终成为敌手。太平公主势力庞大，李隆基决意夺回皇权。',
+    '公元713年，李隆基发动"先天政变"，太平公主集团覆灭，她最终被赐死。'
+  ]
+};
+/* 最终动画：5 位才俊台词 + 公主回答（用户指定版本）
+ * key = 才俊拼音简称（su/cui/wu/gao/hui），对应 CHARACTERS 索引 0~4（薛绍/崔湜/武攸暨/高戬/惠范）
+ *   winnerLine  : 赢家才俊的一句话
+ *   winnerVoice : 才俊配音文件（assets/audio/voice/<name>.mp3，对应 su/cui/wu/gao/hui）
+ *   princessLine: 公主对应 5 句不同回答
+ *   princessVoice: 公主回答配音文件（su_princess / cui_princess / wu_princess / gao_princess / hui_princess）
+ * 最终展示：喜堂图（picture/wedding/wedding.png）+ 大红花（picture/wedding_flower.png）+ 婚礼 BGM（assets/audio/bgm/wedding_bgm.mp3）
+ */
+const FINALE_WINNERS = {
+  su: {
+    winnerLine: '愿得一心人，白首不分离。',
+    winnerVoice: 'su',
+    princessLine: '愿与夫君举案齐眉。',
+    princessVoice: 'su_princess'
+  },
+  cui: {
+    winnerLine: '我还是做公主的忠臣就好。',
+    winnerVoice: 'cui',
+    princessLine: '哼，那做你的崔相去吧！',
+    princessVoice: 'cui_princess'
+  },
+  wu: {
+    winnerLine: '我们的缘分还没到呢，将来再说吧！',
+    winnerVoice: 'wu',
+    princessLine: '既然缘分还没到，本宫也不勉强。',
+    princessVoice: 'wu_princess'
+  },
+  gao: {
+    winnerLine: '我志在朝堂，公主殿下另寻佳婿吧！',
+    winnerVoice: 'gao',
+    princessLine: '将来的朝堂未必不是本宫的。',
+    princessVoice: 'gao_princess'
+  },
+  hui: {
+    winnerLine: '贫僧此生已遁入佛门，不问红尘之事。',
+    winnerVoice: 'hui',
+    princessLine: '是我唐突了，大师。',
+    princessVoice: 'hui_princess'
+  }
+};
+/* CHARACTERS 索引 → FINALE_WINNERS 的 key */
+const IDX_TO_WINNER_KEY = ['su','cui','wu','gao','hui'];
+
+/* 卡牌图片映射 */
+function getCardImage(card){
+  const v = card.value;
+  if(v===1) return 'picture/1卫兵.png';
+  if(v===2) return 'picture/2神父.png';
+  if(v===3) return card.variant ? `picture/3男爵${card.variant}.png` : 'picture/3男爵1.png';
+  if(v===4) return card.variant ? `picture/4女仆${card.variant}.png` : 'picture/4女仆1.png';
+  if(v===5) return card.variant ? `picture/5王子${card.variant}.png` : 'picture/5王子1.png';
+  if(v===6) return 'picture/6国王.png';
+  if(v===7) return 'picture/7伯爵夫人.png';
+  if(v===8) return 'picture/8公主.png';
+  return 'picture/back.png';
+}
+
+/* ===== 创建牌库 ===== */
+function createDeck(){
+  const deck = [];
+  let id = 0;
+  for(const [type,def] of Object.entries(CARD_DEFS)){
+    for(let i=0; i<def.count; i++){
+      let variant = null;
+      if(type==='baron') variant = i+1;     // 男爵1, 男爵2
+      if(type==='handmaid') variant = i+1;  // 女仆1, 女仆2
+      if(type==='prince') variant = i+1;    // 王子1, 王子2
+      deck.push({
+        id: id++,
+        type: type,
+        value: def.value,
+        name: def.name,
+        cn: def.cn,
+        desc: def.desc,
+        variant: variant
+      });
+    }
+  }
+  return deck;
+}
+
+/* ===== 洗牌 ===== */
+function shuffle(arr){
+  for(let i=arr.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+/* ===== 游戏状态 ===== */
+let G = null; // 全局游戏状态
+
+/* ===== 角色定义（icon 与名字绑定） ===== */
+const CHARACTERS = [
+  { icon:'icon1.png', name:'薛绍'   },
+  { icon:'icon2.png', name:'崔湜'   },
+  { icon:'icon3.png', name:'武攸暨' },
+  { icon:'icon4.png', name:'高戬'   },
+  { icon:'icon5.png', name:'惠范'   }
+];
+/* 每个角色对应的日志颜色（用于统一日志中区分发言者） */
+const PLAYER_COLORS = ['#e74c3c','#2ecc71','#3498db','#f39c12','#9b59b6'];
+function colorForName(name){
+  if(!name) return null;
+  for(let i=0; i<CHARACTERS.length; i++){
+    if(name === CHARACTERS[i].name || name.indexOf(CHARACTERS[i].name) >= 0) return PLAYER_COLORS[i];
+  }
+  return null;
+}
+
+/* ===== 初始化游戏 ===== */
+function initGame(numAI, difficulty){
+  const totalPlayers = numAI + 1;
+  const tokensNeeded = totalPlayers===2 ? 7 : totalPlayers===3 ? 5 : 4;
+
+  // 从5个角色中随机抽取 totalPlayers 个
+  const pool = shuffle([...CHARACTERS]);
+  const chosen = pool.slice(0, totalPlayers);
+
+  // 创建玩家
+  const players = [];
+  // 人类玩家：使用随机角色的头像，名字显示为"你·XX"
+  const playerChar = chosen[0];
+  players.push({
+    id:0,
+    name:`你·${playerChar.name}`,
+    charName: playerChar.name,
+    avatar: playerChar.icon,
+    isAI:false, hand:[], alive:true, protection:false, tokens:0, knownCards:{}
+  });
+
+  // AI 玩家：使用剩余的角色
+  for(let i=0; i<numAI; i++){
+    const c = chosen[i+1];
+    players.push({
+      id: i+1,
+      name: c.name,
+      charName: c.name,
+      avatar: c.icon,
+      isAI: true,
+      hand: [],
+      alive: true,
+      protection: false,
+      tokens: 0,
+      knownCards: {},
+      difficulty: difficulty
+    });
+  }
+
+  G = {
+    players: players,
+    deck: [],
+    discard: [],
+    hiddenCard: null,
+    currentPlayer: 0,
+    round: 1,
+    phase: 'menu', // menu, draw, play, effect, end
+    selectedCard: null,
+    pendingAction: null,
+    tokensNeeded: tokensNeeded,
+    log: [],
+    difficulty: difficulty,
+    playedThisRound: []
+  };
+
+  startRound();
+}
+
+/* ===== 开始新回合（一局） ===== */
+function startRound(){
+  // 重置状态
+  G.deck = shuffle(createDeck());
+  G.discard = [];
+  G.playedThisRound = [];
+
+  // 移除1张隐藏牌
+  G.hiddenCard = G.deck.pop();
+  log('system', `新回合开始！移除了1张隐藏牌。`);
+
+  // 如果4人游戏，额外移除1张到弃牌堆（烧牌）
+  if(G.players.length === 4){
+    const burn = G.deck.pop();
+    G.discard.push(burn);
+    log('system', `4人游戏：额外烧掉1张牌（${burn.name}）。`);
+  }
+
+  // 每人发1张
+  for(const p of G.players){
+    p.hand = [];
+    p.alive = true;
+    p.protection = false;
+    p.knownCards = {};
+    p.hand.push(G.deck.pop());
+  }
+
+  // 随机先手
+  G.currentPlayer = Math.floor(Math.random() * G.players.length);
+  G.phase = 'draw';
+
+  AudioSystem.playBgm('game');
+  AudioSystem.sfx('shuffle');
+  log('event', `第 ${G.round} 回合开始！${G.players[G.currentPlayer].name} 先手。`);
+
+  renderAll();
+  showTurnIndicator(`${G.players[G.currentPlayer].name} 的回合`);
+
+  setTimeout(()=>{
+    if(G.players[G.currentPlayer].isAI){
+      aiTurn();
+    } else {
+      playerDraw();
+    }
+  }, 1500);
+}
+
+/* ===== 玩家抽牌 ===== */
+function playerDraw(){
+  if(G.phase !== 'draw') return;
+  if(G.deck.length === 0){
+    endRound();
+    return;
+  }
+  const card = G.deck.pop();
+  G.players[0].hand.push(card);
+  G.phase = 'play';
+  AudioSystem.sfx('draw');
+  renderAll();
+  log('me', `你抽了一张牌。`);
+}
+
+/* ===== 玩家选择出牌 ===== */
+function selectCard(playerId, cardIndex){
+  if(playerId !== 0) return;
+  if(G.phase !== 'play') return;
+  if(G.currentPlayer !== 0) return;
+
+  const player = G.players[0];
+
+  // 检查伯爵夫人规则
+  const hasCountess = player.hand.some(c => c.value === 7);
+  const hasKingOrPrince = player.hand.some(c => c.value === 5 || c.value === 6);
+  if(hasCountess && hasKingOrPrince && player.hand[cardIndex].value !== 7){
+    showModal('必须打出女官', '你同时持有女官和皇帝/皇子，必须打出女官！', null);
+    return;
+  }
+
+  G.selectedCard = cardIndex;
+  renderHand();
+}
+
+/* ===== 确认出牌 ===== */
+function confirmPlay(){
+  if(G.selectedCard === null) return;
+  const player = G.players[0];
+  const card = player.hand.splice(G.selectedCard, 1)[0];
+  G.selectedCard = null;
+  G.discard.push(card);
+  G.playedThisRound.push({ playerId: 0, card: card });
+
+  // 出牌动画
+  showPlayAnimation(card, () => {
+    AudioSystem.sfx('play');
+    log('me', `你打出了 ${card.name}。`);
+    executeCardEffect(card, 0, () => {
+      afterPlay(0);
+    });
+  });
+}
+
+/* ===== 执行卡牌效果 ===== */
+function executeCardEffect(card, playerId, callback){
+  const player = G.players[playerId];
+  /* 出牌时显示技能台词（传完整 card 对象以便按 variant 区分台词+配音） */
+  showSkillQuote(playerId, card);
+
+  switch(card.type){
+    case 'guard':
+      // 需要选择目标和猜测的牌
+      if(playerId === 0){
+        showTargetSelection(playerId, card, (targetId) => {
+          showGuessSelection((guessType) => {
+            doGuard(playerId, targetId, guessType, callback);
+          });
+        });
+      } else {
+        aiGuard(playerId, card, callback);
+      }
+      break;
+
+    case 'priest':
+      if(playerId === 0){
+        showTargetSelection(playerId, card, (targetId) => {
+          doPriest(playerId, targetId, callback);
+        });
+      } else {
+        aiPriest(playerId, card, callback);
+      }
+      break;
+
+    case 'baron':
+      if(playerId === 0){
+        showTargetSelection(playerId, card, (targetId) => {
+          doBaron(playerId, targetId, callback);
+        });
+      } else {
+        aiBaron(playerId, card, callback);
+      }
+      break;
+
+    case 'handmaid':
+      player.protection = true;
+      AudioSystem.sfx('shield');
+      log('event', `${player.name} 获得了宫女的保护！`);
+      renderAll();
+      callback();
+      break;
+
+    case 'prince':
+      if(playerId === 0){
+        /* 皇子不能选自己（避免自己弃自己再摸牌的无意义操作，也避免卡死） */
+        showTargetSelection(playerId, card, false, (targetId) => {
+          doPrince(playerId, targetId, callback);
+        });
+      } else {
+        aiPrince(playerId, card, callback);
+      }
+      break;
+
+    case 'king':
+      if(playerId === 0){
+        /* 皇帝不能选自己（交换自己手牌无效并可能导致流程异常） */
+        showTargetSelection(playerId, card, false, (targetId) => {
+          doKing(playerId, targetId, callback);
+        });
+      } else {
+        aiKing(playerId, card, callback);
+      }
+      break;
+
+    case 'countess':
+      log('event', `${player.name} 打出了女官。`);
+      renderAll();
+      callback();
+      break;
+
+    case 'princess':
+      eliminate(playerId);
+      log('event', `${player.name} 弃掉了太平公主，被淘汰！`);
+      AudioSystem.sfx('eliminate');
+      renderAll();
+      callback();
+      break;
+
+    default:
+      callback();
+  }
+}
+
+/* ===== 卡牌效果实现 ===== */
+
+// 卫兵
+function doGuard(playerId, targetId, guessType, callback){
+  const target = G.players[targetId];
+  if(!target || !target.alive || target.protection){
+    log('system', `${target ? target.name : '目标'} 受保护或已淘汰，无效。`);
+    callback();
+    return;
+  }
+  AudioSystem.sfx('flip');
+  const targetCard = target.hand[0];
+  if(targetCard && targetCard.type === guessType){
+    log('event', `猜中了！${target.name} 持有 ${targetCard.name}，被淘汰！`);
+    eliminate(targetId);
+    AudioSystem.sfx('eliminate');
+  } else {
+    log('event', `没猜中。${target.name} 不持有 ${CARD_DEFS[guessType].name}。`);
+  }
+
+  // AI 记忆
+  if(G.players[playerId].isAI){
+    G.players[playerId].knownCards[targetId] = null; // 猜错了，不确定
+  }
+  renderAll();
+  callback();
+}
+
+// 神父
+function doPriest(playerId, targetId, callback){
+  const target = G.players[targetId];
+  if(!target || !target.alive || target.protection){
+    log('system', `${target ? target.name : '目标'} 受保护或已淘汰，无效。`);
+    callback();
+    return;
+  }
+  AudioSystem.sfx('flip');
+  const targetCard = target.hand[0];
+
+  if(playerId === 0){
+    // 玩家看到了AI的手牌
+    showModal('方士效果', `${target.name} 的手牌是：`, targetCard, () => {
+      callback();
+    });
+  } else {
+    // AI 看到了玩家的手牌
+    G.players[playerId].knownCards[0] = targetCard.type;
+    log('event', `${G.players[playerId].name} 查看了你的手牌。`);
+    callback();
+  }
+}
+
+// 男爵
+function doBaron(playerId, targetId, callback){
+  const target = G.players[targetId];
+  if(!target || !target.alive || target.protection){
+    log('system', `${target ? target.name : '目标'} 受保护或已淘汰，无效。`);
+    callback();
+    return;
+  }
+  AudioSystem.sfx('flip');
+  const myCard = G.players[playerId].hand[0];
+  const targetCard = target.hand[0];
+
+  if(myCard.value > targetCard.value){
+    log('event', `宰相比拼：${G.players[playerId].name}(${myCard.name}) > ${target.name}(${targetCard.name})，${target.name} 被淘汰！`);
+    eliminate(targetId);
+    AudioSystem.sfx('eliminate');
+  } else if(myCard.value < targetCard.value){
+    log('event', `宰相比拼：${G.players[playerId].name}(${myCard.name}) < ${target.name}(${targetCard.name})，${G.players[playerId].name} 被淘汰！`);
+    eliminate(playerId);
+    AudioSystem.sfx('eliminate');
+  } else {
+    log('event', `宰相比拼：双方点数相同（${myCard.name}），平局！`);
+  }
+  renderAll();
+  callback();
+}
+
+// 王子
+function doPrince(playerId, targetId, callback){
+  const target = G.players[targetId];
+  if(!target || !target.alive){
+    callback();
+    return;
+  }
+
+  const discarded = target.hand.shift();
+  G.discard.push(discarded);
+
+  if(discarded.type === 'princess'){
+    log('event', `${target.name} 被迫弃掉了太平公主，被淘汰！`);
+    eliminate(targetId);
+    AudioSystem.sfx('eliminate');
+    renderAll();
+    callback();
+  } else {
+    log('event', `${target.name} 弃掉了 ${discarded.name}。`);
+    if(G.deck.length > 0){
+      const newCard = G.deck.pop();
+      target.hand.push(newCard);
+      AudioSystem.sfx('draw');
+      // 如果是对玩家使用，玩家知道新牌
+      // 如果AI对AI使用，AI之间不知道
+    } else {
+            // 牌库空了，用隐藏牌
+      if(G.hiddenCard){
+        target.hand.push(G.hiddenCard);
+        G.hiddenCard = null;
+        log('system', `${target.name} 从隐藏牌中抽了一张。`);
+      } else {
+        log('system', `${target.name} 没有可抽的牌了。`);
+      }
+    }
+    renderAll();
+    callback();
+  }
+}
+
+// 国王
+function doKing(playerId, targetId, callback){
+  const target = G.players[targetId];
+  if(!target || !target.alive || target.protection){
+    log('system', `${target ? target.name : '目标'} 受保护或已淘汰，无效。`);
+    callback();
+    return;
+  }
+  AudioSystem.sfx('swap');
+  const myHand = G.players[playerId].hand;
+  const targetHand = target.hand;
+  const tmp = myHand[0];
+  myHand[0] = targetHand[0];
+  targetHand[0] = tmp;
+  log('event', `${G.players[playerId].name} 与 ${target.name} 交换了手牌。`);
+
+  // AI 记忆更新
+  if(G.players[playerId].isAI){
+    G.players[playerId].knownCards[targetId] = null;
+  }
+  renderAll();
+  callback();
+}
+
+/* ===== 淘汰 ===== */
+function eliminate(playerId){
+  const p = G.players[playerId];
+  p.alive = false;
+  p.protection = false;
+  p.hand = [];
+}
+
+/* ===== 出牌后处理 ===== */
+function afterPlay(playerId){
+  // 检查游戏结束条件
+  const alive = G.players.filter(p => p.alive);
+  if(alive.length <= 1){
+    endRound();
+    return;
+  }
+  if(G.deck.length === 0){
+    endRound();
+    return;
+  }
+
+  // 下一玩家
+  nextPlayer();
+}
+
+/* ===== 下一玩家 ===== */
+function nextPlayer(){
+  const anyAlive = G.players.some(p => p.alive);
+  if(!anyAlive){ endRound(); return; }
+  let next = (G.currentPlayer + 1) % G.players.length;
+  while(!G.players[next].alive){
+    next = (next + 1) % G.players.length;
+  }
+  G.currentPlayer = next;
+  G.phase = 'draw';
+
+  // 清除保护（该玩家的保护到他的回合开始时失效）
+  G.players[next].protection = false;
+
+  renderAll();
+  showTurnIndicator(`${G.players[next].name} 的回合`);
+
+  setTimeout(() => {
+    if(G.players[next].isAI){
+      aiTurn();
+    } else {
+      playerDraw();
+    }
+  }, 1500);
+}
+
+/* ===== 回合结束 ===== */
+function endRound(){
+  const alive = G.players.filter(p => p.alive);
+
+  let winner;
+  let winMode = 'eliminate'; // eliminate=淘汰他人获胜，compare=比点数决胜
+  if(alive.length === 1){
+    winner = alive[0];
+    winMode = 'eliminate';
+  } else {
+    // 比较手牌点数
+    alive.sort((a,b) => {
+  const va = a.hand && a.hand[0] ? a.hand[0].value : 0;
+  const vb = b.hand && b.hand[0] ? b.hand[0].value : 0;
+  return vb - va;
+});
+    winner = alive[0];
+    winMode = 'compare';
+  }
+
+  winner.tokens++;
+  AudioSystem.sfx('token');
+
+  log('event', `第 ${G.round} 回合结束！${winner.name} 获胜，获得1枚定情玉佩！`);
+
+  // 检查总胜利
+  if(winner.tokens >= G.tokensNeeded){
+    showGameOver(winner);
+    return;
+  }
+
+  // 显示回合结果
+  showRoundResult(winner, winMode, () => {
+    G.round++;
+    startRound();
+  });
+}
+
+/* ===== AI 逻辑 ===== */
+
+function aiTurn(){
+  const ai = G.players[G.currentPlayer];
+  if(!ai.alive){
+    nextPlayer();
+    return;
+  }
+
+  // 抽牌
+  if(G.deck.length === 0){
+    endRound();
+    return;
+  }
+  const card = G.deck.pop();
+  ai.hand.push(card);
+  AudioSystem.sfx('draw');
+  log(ai.id, `${ai.name} 抽了一张牌。`);
+  renderAll();
+
+  // AI 思考
+  setTimeout(() => {
+    const action = aiChooseAction(ai);
+    if(!action){
+      // 默认打出第一张
+      const c = ai.hand.shift();
+      G.discard.push(c);
+      G.playedThisRound.push({ playerId: ai.id, card: c });
+      log(ai.id, `${ai.name} 打出了 ${c.name}。`);
+      showPlayAnimation(c, () => {
+        AudioSystem.sfx('play');
+        executeCardEffect(c, ai.id, () => afterPlay(ai.id));
+      });
+      return;
+    }
+
+    const c = ai.hand.splice(action.cardIndex, 1)[0];
+    G.discard.push(c);
+    G.playedThisRound.push({ playerId: ai.id, card: c });
+    log(ai.id, `${ai.name} 打出了 ${c.name}。`);
+
+    showPlayAnimation(c, () => {
+      AudioSystem.sfx('play');
+      executeCardEffect(c, ai.id, () => afterPlay(ai.id));
+    });
+  }, 1500 + Math.random() * 1000);
+}
+
+/* AI 选择行动 */
+function aiChooseAction(ai){
+  const hand = ai.hand;
+  if(hand.length === 0) return null;
+
+  const diff = ai.difficulty || 'normal';
+
+  // 强制伯爵夫人
+  const hasCountess = hand.some(c => c.value === 7);
+  const hasKingOrPrince = hand.some(c => c.value === 5 || c.value === 6);
+  if(hasCountess && hasKingOrPrince){
+    return { cardIndex: hand.findIndex(c => c.value === 7) };
+  }
+
+  // 获取可选目标
+  const getTargets = (includeSelf) => {
+    return G.players.filter(p => p.id !== ai.id && p.alive && !p.protection || (includeSelf && p.id === ai.id && p.alive));
+  };
+
+  // 简单模式：随机出牌
+  if(diff === 'easy'){
+    return { cardIndex: Math.floor(Math.random() * hand.length) };
+  }
+
+  // 普通和困难模式：策略选择
+  const otherCard = hand.length > 1 ? (hand[0].value >= hand[1].value ? hand[1] : hand[0]) : hand[0];
+  const keepCard = hand.length > 1 ? (hand[0].value >= hand[1].value ? hand[0] : hand[1]) : hand[0];
+
+  // 如果有公主，出另一张
+  if(hand.some(c => c.value === 8)){
+    const otherIdx = hand.findIndex(c => c.value !== 8);
+    return { cardIndex: otherIdx };
+  }
+
+  // 如果有卫兵且有已知目标
+  const guardIdx = hand.findIndex(c => c.value === 1);
+  if(guardIdx >= 0){
+    // 检查是否知道某玩家手牌
+    for(const [pid, knownType] of Object.entries(ai.knownCards)){
+      if(knownType && G.players[pid] && G.players[pid].alive && !G.players[pid].protection){
+        return { cardIndex: guardIdx, target: parseInt(pid), guess: knownType };
+      }
+    }
+    // 困难模式：概率推理
+    if(diff === 'hard'){
+      const best = probabilityGuess(ai);
+      if(best){
+        return { cardIndex: guardIdx, target: best.target, guess: best.guess };
+      }
+    }
+  }
+
+  // 如果有男爵且手牌大
+  const baronIdx = hand.findIndex(c => c.value === 3);
+  if(baronIdx >= 0 && keepCard.value >= 6){
+    const targets = getTargets(false);
+    if(targets.length > 0){
+      return { cardIndex: baronIdx, target: targets[0].id };
+    }
+  }
+
+  // 如果有王子且对手手牌可能大
+  const princeIdx = hand.findIndex(c => c.value === 5);
+  if(princeIdx >= 0){
+    const targets = getTargets(true);
+    if(targets.length > 0){
+      // 优先攻击对手
+      const oppTargets = targets.filter(t => t.id !== ai.id);
+      if(oppTargets.length > 0){
+        return { cardIndex: princeIdx, target: oppTargets[0].id };
+      }
+      // 没有对手可攻击，对自己使用（如果手牌差）
+      if(keepCard.value <= 3){
+        return { cardIndex: princeIdx, target: ai.id };
+      }
+    }
+  }
+
+  // 如果有国王，且手牌小
+  const kingIdx = hand.findIndex(c => c.value === 6);
+  if(kingIdx >= 0 && keepCard.value <= 3){
+    const targets = getTargets(false);
+    if(targets.length > 0){
+      return { cardIndex: kingIdx, target: targets[0].id };
+    }
+  }
+
+  // 如果有神父
+  const priestIdx = hand.findIndex(c => c.value === 2);
+  if(priestIdx >= 0){
+    const targets = getTargets(false);
+    if(targets.length > 0){
+      return { cardIndex: priestIdx, target: targets[0].id };
+    }
+  }
+
+  // 默认：出最低值的牌
+  let minIdx = 0;
+  for(let i=1; i<hand.length; i++){
+    if(hand[i].value < hand[minIdx].value) minIdx = i;
+  }
+  return { cardIndex: minIdx };
+}
+
+/* AI 概率猜测 */
+function probabilityGuess(ai){
+  // 统计已出的牌
+  const played = {};
+  for(const [type, def] of Object.entries(CARD_DEFS)){
+    played[type] = def.count;
+  }
+  // 减去弃牌堆的牌
+  for(const c of G.discard){
+    played[c.type]--;
+  }
+  // 减去自己手牌
+  for(const c of ai.hand){
+    played[c.type]--;
+  }
+  // 减去已知牌
+  for(const [pid, knownType] of Object.entries(ai.knownCards)){
+    if(knownType && G.players[pid] && G.players[pid].alive){
+      played[knownType]--;
+    }
+  }
+
+  // 对每个存活对手，计算最可能的牌
+  let bestGuess = null;
+  let bestProb = 0;
+  for(const p of G.players){
+    if(p.id === ai.id || !p.alive || p.protection) continue;
+    const remaining = Object.entries(played).filter(([t,c]) => c > 0 && t !== 'guard');
+    const total = remaining.reduce((s,[,c]) => s+c, 0);
+    if(total === 0) continue;
+    for(const [type, count] of remaining){
+      const prob = count / total;
+      if(prob > bestProb){
+        bestProb = prob;
+        bestGuess = { target: p.id, guess: type, prob: prob };
+      }
+    }
+  }
+  return bestGuess;
+}
+
+/* AI 卫兵 */
+function aiGuard(playerId, card, callback){
+  const ai = G.players[playerId];
+
+  let target = null;
+  let guess = null;
+
+  // 检查已知信息
+  for(const [pid, knownType] of Object.entries(ai.knownCards)){
+    if(knownType && G.players[pid] && G.players[pid].alive && !G.players[pid].protection && knownType !== 'guard'){
+      target = G.players[parseInt(pid)];
+      guess = knownType;
+      break;
+    }
+  }
+
+  // 概率猜测
+  if(!target && (ai.difficulty === 'hard' || ai.difficulty === 'normal')){
+    const best = probabilityGuess(ai);
+    if(best){
+      target = G.players[best.target];
+      guess = best.guess;
+    }
+  }
+
+  // 随机猜测
+  if(!target){
+    const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+    if(targets.length === 0){
+      log(playerId, `${ai.name} 没有有效目标。`);
+      callback();
+      return;
+    }
+    target = targets[Math.floor(Math.random() * targets.length)];
+    const guessable = Object.entries(CARD_DEFS).filter(([t,d]) => t !== 'guard').map(([t,d]) => t);
+    guess = guessable[Math.floor(Math.random() * guessable.length)];
+  }
+
+  doGuard(playerId, target.id, guess, callback);
+}
+
+/* AI 神父 */
+function aiPriest(playerId, card, callback){
+  const ai = G.players[playerId];
+  const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+  if(targets.length === 0){
+    log(playerId, `${ai.name} 没有有效目标。`);
+    callback();
+    return;
+  }
+  // 优先查看人类玩家
+  const humanTargets = targets.filter(t => !t.isAI);
+  const target = humanTargets.length > 0 ? humanTargets[0] : targets[0];
+
+  const targetCard = target.hand[0];
+  ai.knownCards[target.id] = targetCard.type;
+  log('event', `${ai.name} 查看了 ${target.name} 的手牌。`);
+  callback();
+}
+
+/* AI 男爵 */
+function aiBaron(playerId, card, callback){
+  const ai = G.players[playerId];
+  const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+  if(targets.length === 0){
+    log(playerId, `${ai.name} 没有有效目标。`);
+    callback();
+    return;
+  }
+  const target = targets[0];
+  doBaron(playerId, target.id, callback);
+}
+
+/* AI 王子 */
+function aiPrince(playerId, card, callback){
+  const ai = G.players[playerId];
+  /* 皇子不能以自己为目标；被宫女保护的也不能选为目标（除非只剩 self，那这里判空直接 callback） */
+  const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+  if(targets.length === 0){
+    log(playerId, `${ai.name} 找不到有效的皇子目标，跳过效果。`);
+    callback();
+    return;
+  }
+  // 优先攻击人类玩家
+  const humanTargets = targets.filter(t => !t.isAI);
+  const target = humanTargets.length > 0 ? humanTargets[0] : targets[0];
+  doPrince(playerId, target.id, callback);
+}
+
+/* AI 国王 */
+function aiKing(playerId, card, callback){
+  const ai = G.players[playerId];
+  const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+  if(targets.length === 0){
+    log(playerId, `${ai.name} 没有有效目标，跳过效果。`);
+    callback();
+    return;
+  }
+  const target = targets[0];
+  doKing(playerId, target.id, callback);
+}
+
+/* ===== UI 渲染 ===== */
+
+function renderAll(){
+  renderTopBar();
+  renderOpponents();
+  renderPlayerInfo();
+  renderDeck();
+  renderDiscard();
+  renderHand();
+  renderCardTracker();
+}
+
+/* 场上记牌器：统计每种角色还未被弃出的剩余张数 */
+function renderCardTracker(){
+  const el = document.getElementById('card-tracker');
+  if(!el || !G) return;
+  const discarded = {};
+  for(const c of G.discard){
+    if(c && c.type) discarded[c.type] = (discarded[c.type] || 0) + 1;
+  }
+  let html = '<div class="ct-title">场上剩余</div><div class="ct-list">';
+  for(const [type, def] of Object.entries(CARD_DEFS)){
+    const remain = def.count - (discarded[type] || 0);
+    const cls = remain === 0 ? 'ct-zero' : '';
+    html += `<span class="ct-item ${cls}">${def.name}<b>${remain}</b></span>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderTopBar(){
+  document.getElementById('round-num').textContent = G.round;
+}
+
+/* 根据玩家数生成对手位置：全部改为在 #opponents-area 内部 grid 排布，不与其他 UI 重叠
+   3P=2 对手 → 左右两格（pos-g2-1 / pos-g2-2）
+   4P=3 对手 → 左中右三格（pos-g3-1 / pos-g3-2 / pos-g3-3）
+   2P=1 对手 → 居中（pos-g1-1）
+*/
+function getOpponentPositions(numPlayers){
+  if(numPlayers === 4) return ['pos-g3-1','pos-g3-2','pos-g3-3'];
+  if(numPlayers === 3) return ['pos-g2-1','pos-g2-2'];
+  return ['pos-g1-1'];
+}
+
+function renderOpponents(){
+  const area = document.getElementById('opponents-area');
+  const positions = getOpponentPositions(G.players.length);
+  const myId = G.myPlayerId !== undefined ? G.myPlayerId : 0;
+  const opps = G.players.filter(p => p.id !== myId);
+  // 给 area 加列数 class（n1/n2/n3），用于 CSS grid 分列
+  area.classList.remove('n1','n2','n3');
+  area.classList.add('n' + opps.length);
+  let html = '';
+  for(let i=0; i<opps.length; i++){
+    const p = opps[i];
+    const pos = positions[i] || 'pos-g1-1';
+    const isActive = p.id === G.currentPlayer;
+    const isEliminated = !p.alive;
+    let cardBacks = '';
+    for(let j=0; j<p.hand.length; j++){
+      cardBacks += `<img class="opp-card-back" src="picture/back.png">`;
+    }
+    let protection = p.protection ? '<span class="opp-protection">保护</span>' : '';
+    let tokens = '';
+    for(let j=0; j<G.tokensNeeded; j++){
+      tokens += `<img src="assets/ui/token.png" class="${j < p.tokens ? '' : 'empty'}">`;
+    }
+
+    html += `
+      <div class="opponent ${pos} ${isActive ? 'active' : ''} ${isEliminated ? 'eliminated' : ''}" data-pid="${p.id}">
+        <div class="opp-avatar"><img src="assets/ui/${p.avatar}" alt="${p.name}"></div>
+        <div class="opp-info">
+          <div class="opp-name">${p.name}</div>
+          <div class="opp-status">${protection}</div>
+          <div class="opp-cards">${cardBacks}</div>
+          <div class="opp-tokens">${tokens}</div>
+        </div>
+      </div>
+    `;
+  }
+  area.innerHTML = html;
+}
+
+function renderPlayerInfo(){
+  const myId = G.myPlayerId !== undefined ? G.myPlayerId : 0;
+  const player = G.players.find(p => p.id === myId) || G.players[0];
+  const avatarImg = document.getElementById('player-avatar-img');
+  const label = document.getElementById('player-label');
+  const tokensEl = document.getElementById('player-tokens');
+  const avatarBox = document.getElementById('player-avatar-box');
+  const shieldEl = document.getElementById('player-shield');
+
+  avatarImg.src = `assets/ui/${player.avatar}`;
+  avatarImg.alt = player.name;
+  label.textContent = player.name;
+
+  /* 淘汰变灰 */
+  if(player.alive){
+    avatarBox.classList.remove('eliminated');
+  } else {
+    avatarBox.classList.add('eliminated');
+  }
+  /* 宫女守护中：在名字/积分下方显示蓝色盾牌提示（完全在头像外部，不会被头像盖住） */
+  if(player.protection && player.alive){
+    shieldEl.textContent = '🛡 宫女守护中';
+    shieldEl.style.display = 'block';
+    label.style.color = '#7ec6ff';
+    label.style.textShadow = '0 0 8px rgba(85,172,238,0.4)';
+  } else {
+    shieldEl.textContent = '';
+    shieldEl.style.display = 'none';
+    label.style.color = '';
+    label.style.textShadow = '';
+  }
+
+  /* 积分 */
+  let tokens = '';
+  for(let i=0; i<G.tokensNeeded; i++){
+    tokens += `<img src="assets/ui/token.png" class="${i < player.tokens ? '' : 'empty'}">`;
+  }
+  tokensEl.innerHTML = tokens;
+}
+
+function renderDeck(){
+  const pile = document.getElementById('deck-pile');
+  const count = document.getElementById('deck-count');
+  if(G.deck.length > 0){
+    pile.innerHTML = `<img src="picture/back.png" alt="牌库">`;
+    count.textContent = `剩余 ${G.deck.length} 张`;
+  } else {
+    pile.innerHTML = `<img src="picture/back.png" alt="牌库" style="opacity:0.3">`;
+    count.textContent = `牌库已空`;
+  }
+}
+
+function renderDiscard(){
+  const pile = document.getElementById('discard-pile');
+  if(G.discard.length > 0){
+    const top = G.discard[G.discard.length - 1];
+    pile.innerHTML = `<img src="${getCardImage(top)}" alt="${top.name}">`;
+  } else {
+    pile.innerHTML = '';
+  }
+}
+
+function renderHand(){
+  const handEl = document.getElementById('player-hand');
+  const myId = G.myPlayerId !== undefined ? G.myPlayerId : 0;
+  const player = G.players.find(p => p.id === myId) || G.players[0];
+  if(!player.alive){
+    handEl.innerHTML = '';
+    renderPlayerAction();
+    return;
+  }
+
+  // 检查伯爵夫人强制
+  const hasCountess = player.hand.some(c => c.value === 7);
+  const hasKingOrPrince = player.hand.some(c => c.value === 5 || c.value === 6);
+  const forceCountess = hasCountess && hasKingOrPrince;
+
+  const isClient = G.isClient === true;
+  const clientCanPlay = isClient && NetClient.canPlay === true;
+
+  let html = '';
+  for(let i=0; i<player.hand.length; i++){
+    const card = player.hand[i];
+    const selected = isClient ? (NetClient.selectedCard === i) : (G.selectedCard === i);
+    const disabled = forceCountess && card.value !== 7;
+    let clickHandler;
+    if(disabled){
+      clickHandler = 'style="opacity:0.4;pointer-events:none;"';
+    } else if(isClient){
+      if(clientCanPlay){
+        clickHandler = `onclick="NetClient.selectCard(${i})" ondblclick="event.stopPropagation();showHandCardDetail(${i})"`;
+      } else {
+        clickHandler = `style="opacity:0.82;" ondblclick="event.stopPropagation();showHandCardDetail(${i})"`;
+      }
+    } else {
+      clickHandler = `onclick="selectCard(${myId}, ${i})" ondblclick="event.stopPropagation();showHandCardDetail(${i})"`;
+    }
+    html += `
+      <div class="hand-card ${selected ? 'selected' : ''}" ${clickHandler}>
+        <img src="${getCardImage(card)}" alt="${card.name}">
+        <div class="card-tooltip">
+          <div class="ct-name">${card.name}（点数 ${card.value}）</div>
+          <div class="ct-desc">${card.desc}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  handEl.innerHTML = html;
+  renderPlayerAction();
+}
+
+/* 渲染出牌操作栏（卡牌上方） */
+function renderPlayerAction(){
+  const actionEl = document.getElementById('player-action');
+  const myId = G.myPlayerId !== undefined ? G.myPlayerId : 0;
+  const player = G.players.find(p => p.id === myId) || G.players[0];
+  const isClient = G.isClient === true;
+
+  if(isClient){
+    if(NetClient.selectedCard === null || !player.alive || !NetClient.canPlay){
+      actionEl.innerHTML = '';
+      return;
+    }
+    const sel = player.hand[NetClient.selectedCard];
+    if(!sel){ actionEl.innerHTML = ''; return; }
+    actionEl.innerHTML = `
+      <div class="action-bar">
+        <div class="action-info">
+          <div class="action-name">${sel.name}（点数 ${sel.value}）</div>
+          <div class="action-desc">${sel.desc}</div>
+        </div>
+        <button class="action-btn play-btn" onclick="NetClient.confirmPlay()">出牌</button>
+        <button class="action-btn cancel-btn" onclick="NetClient.cancelSelect()">取消</button>
+      </div>
+    `;
+    return;
+  }
+
+  if(G.selectedCard === null || !player.alive){
+    actionEl.innerHTML = '';
+    return;
+  }
+
+  const sel = player.hand[G.selectedCard];
+  if(!sel){
+    actionEl.innerHTML = '';
+    return;
+  }
+
+  actionEl.innerHTML = `
+    <div class="action-bar">
+      <div class="action-info">
+        <div class="action-name">${sel.name}（点数 ${sel.value}）</div>
+        <div class="action-desc">${sel.desc}</div>
+      </div>
+      <button class="action-btn play-btn" onclick="confirmPlay()">出牌</button>
+      <button class="action-btn cancel-btn" onclick="cancelSelect()">取消</button>
+    </div>
+  `;
+}
+
+function cancelSelect(){
+  G.selectedCard = null;
+  renderHand();
+}
+
+/* ===== 目标选择面板 ===== */
+function showTargetSelection(playerId, card, includeSelf, callback){
+  // 参数兼容：如果 includeSelf 是 function，则是旧调用方式
+  if(typeof includeSelf === 'function'){
+    callback = includeSelf;
+    includeSelf = false;
+  }
+  /* 硬安全锁：皇子/皇帝/宰相 绝不能允许选择自己（会造成无意义效果或卡死），
+   * 无论调用方传什么 includeSelf，这类卡一律强制 false。 */
+  if(card && card.type && (card.type === 'prince' || card.type === 'king' || card.type === 'baron')){
+    includeSelf = false;
+  }
+
+  const targets = G.players.filter(p => {
+    if(p.id === playerId && !includeSelf) return false;
+    if(!p.alive) return false;
+    if(p.protection && p.id !== playerId) return false;
+    return true;
+  });
+
+  if(targets.length === 0){
+    log('system', '没有可选目标。');
+    callback(null);
+    return;
+  }
+
+  const panel = document.getElementById('action-panel');
+  const title = document.getElementById('panel-title');
+  const body = document.getElementById('panel-body');
+
+  title.textContent = `选择目标 — ${card.name}`;
+
+  let html = '<div class="target-grid">';
+  for(const t of targets){
+    html += `
+      <div class="target-cell">
+        <div class="target-btn" onclick="selectTarget(${t.id})">
+          <img src="assets/ui/${t.avatar}" alt="${t.name}">
+        </div>
+        <div class="tname">${t.name}</div>
+      </div>
+    `;
+  }
+  html += '</div>';
+  html += '<button class="panel-cancel" onclick="cancelTarget()">取消</button>';
+  body.innerHTML = html;
+  panel.classList.add('show');
+
+  // 存储回调
+  G.pendingAction = { type: 'target', callback: callback };
+}
+
+function selectTarget(targetId){
+  const panel = document.getElementById('action-panel');
+  panel.classList.remove('show');
+  if(G.pendingAction && G.pendingAction.type === 'target'){
+    const cb = G.pendingAction.callback;
+    G.pendingAction = null;
+    cb(targetId);
+  }
+}
+
+function cancelTarget(){
+  const panel = document.getElementById('action-panel');
+  panel.classList.remove('show');
+  G.pendingAction = null;
+  // 返回选择手牌
+  G.selectedCard = null;
+  renderHand();
+}
+
+/* ===== 猜牌选择面板 ===== */
+function showGuessSelection(callback){
+  const panel = document.getElementById('action-panel');
+  const title = document.getElementById('panel-title');
+  const body = document.getElementById('panel-body');
+
+  title.textContent = '猜一个角色（不能猜金吾卫）';
+
+  const guessable = Object.entries(CARD_DEFS).filter(([t,d]) => t !== 'guard');
+
+  let html = '<div class="guess-grid">';
+  for(const [type, def] of guessable){
+    // 计算剩余可能数量
+    let remaining = def.count;
+    for(const c of G.discard){
+      if(c.type === type) remaining--;
+    }
+    if(remaining <= 0) continue;
+
+    // 临时卡牌对象用于获取图片
+    const tempCard = { value: def.value, variant: type==='baron'||type==='handmaid'||type==='prince' ? 1 : null, type: type };
+    html += `
+      <div class="guess-btn" onclick="selectGuess('${type}')">
+        <img src="${getCardImage(tempCard)}" alt="${def.name}">
+        <div class="gname">${def.name}</div>
+        <div class="gval">点数 ${def.value} · 剩${remaining}张</div>
+      </div>
+    `;
+  }
+  html += '</div>';
+  html += '<button class="panel-cancel" onclick="cancelGuess()">返回</button>';
+  body.innerHTML = html;
+  panel.classList.add('show');
+
+  G.pendingAction = { type: 'guess', callback: callback };
+}
+
+function selectGuess(guessType){
+  const panel = document.getElementById('action-panel');
+  panel.classList.remove('show');
+  if(G.pendingAction && G.pendingAction.type === 'guess'){
+    const cb = G.pendingAction.callback;
+    G.pendingAction = null;
+    cb(guessType);
+  }
+}
+
+function cancelGuess(){
+  const panel = document.getElementById('action-panel');
+  panel.classList.remove('show');
+  G.pendingAction = null;
+  // 回到目标选择
+  G.selectedCard = null;
+  renderHand();
+}
+
+/* ===== 动画 ===== */
+function showPlayAnimation(card, callback){
+  const zone = document.getElementById('play-zone');
+  const img = zone.querySelector('.played-card');
+  img.src = getCardImage(card);
+  zone.classList.add('show');
+
+  setTimeout(() => {
+    zone.classList.remove('show');
+    callback();
+  }, 800);
+}
+
+function showTurnIndicator(text){
+  const el = document.getElementById('turn-indicator');
+  el.textContent = text;
+  el.classList.remove('show');
+  void el.offsetWidth; // 重排
+  el.classList.add('show');
+}
+
+/* ===== 弹窗 ===== */
+function showModal(title, message, card, callback){
+  const modal = document.getElementById('modal');
+  const content = document.getElementById('modal-content');
+
+  let html = `<h2>${title}</h2>`;
+  if(card){
+    html += `<img class="reveal-card" src="${getCardImage(card)}" alt="${card.name}">`;
+  }
+  html += `<p>${message}</p>`;
+  if(callback){
+    html += `<button class="modal-btn" onclick="closeModal()">确定</button>`;
+  }
+  content.innerHTML = html;
+
+  if(callback){
+    window._modalCallback = callback;
+  } else {
+    window._modalCallback = null;
+  }
+
+  modal.classList.add('show');
+}
+
+function closeModal(){
+  const modal = document.getElementById('modal');
+  modal.classList.remove('show');
+  if(window._modalCallback){
+    const cb = window._modalCallback;
+    window._modalCallback = null;
+    cb();
+  }
+}
+
+function showRoundResult(winner, winMode, callback){
+  const modal = document.getElementById('modal');
+  const content = document.getElementById('modal-content');
+
+  let scores = '<div style="margin:10px 0;">';
+  for(const p of G.players){
+    scores += `<div style="color:${p.id===winner.id?'var(--gold)':'var(--text-dim)'};margin:4px 0;">${p.name}: ${p.tokens} / ${G.tokensNeeded} 🪿</div>`;
+  }
+  scores += '</div>';
+
+  /* 根据获胜方式展示不同文案 */
+  let titleLine;
+  if(winMode === 'compare'){
+    titleLine = `${winner.name} 的点数最大，拔得头筹！`;
+  } else {
+    titleLine = `${winner.name} 淘汰了其他竞争者，获得太平公主青睐！`;
+  }
+
+  content.innerHTML = `
+    <h2>${winner.id === 0 ? '🎉 你赢了！' : winner.name + ' 获胜'}</h2>
+    <p style="color:var(--gold);font-size:1.05rem;margin:14px 0;line-height:1.8;">${titleLine}</p>
+    ${scores}
+    <p>第 ${G.round} 回合结束</p>
+    <button class="modal-btn" onclick="closeModal()">下一回合</button>
+  `;
+
+  window._modalCallback = callback;
+  modal.classList.add('show');
+
+  if(winner.id === 0){
+    AudioSystem.sfx('victory');
+  }
+}
+
+function showGameOver(winner){
+  G.phase = 'over';
+  /* 最终赢家展示文字+图片动态动画 */
+  setTimeout(() => showFinale(winner.name), 200);
+}
+
+/* ===== 技能台词气泡 ===== */
+/* card 参数为完整卡牌对象（含 variant），用于按 variant 选不同台词+配音 */
+function showSkillQuote(playerId, card){
+  const quoteData = getCardQuote(card);
+  if(!quoteData || !quoteData.text) return;
+  /* 播放配音（延迟 200ms，与 sfx('play')/出牌动画错开，避免被浏览器音频节流吞掉） */
+  if(quoteData.voiceName){
+    AudioSystem.voice(quoteData.voiceName, 200);
+  }
+  /* 定位到对应玩家头像附近 */
+  let anchor;
+  if(playerId === 0){
+    anchor = document.querySelector('#player-info .player-avatar');
+  } else {
+    const opps = document.querySelectorAll('.opponent');
+    const oppsArr = Array.from(opps);
+    anchor = oppsArr.find(o => o.dataset && o.dataset.pid == playerId);
+    if(!anchor) anchor = oppsArr[0];
+  }
+  const quote = document.createElement('div');
+  quote.className = 'skill-quote';
+  quote.textContent = quoteData.text;
+  document.body.appendChild(quote);
+  if(anchor){
+    const r = anchor.getBoundingClientRect();
+    quote.style.left = (r.left + r.width/2) + 'px';
+    quote.style.top = (r.top - quote.offsetHeight - 14) + 'px';
+  } else {
+    quote.style.left = '50%';
+    quote.style.top = '30%';
+  }
+  setTimeout(() => { if(quote.parentNode) quote.parentNode.removeChild(quote); }, 2800);
+}
+
+/* ===== 最终赢家动画（重写版 v2：分阶段+voice顺序+后记清屏） ===== */
+/* 全局定时器追踪：closeFinale 时全部清理，避免旧定时器干扰下次播放 */
+let _finaleTimers = [];
+function _finaleTimeout(fn, ms){
+  const id = setTimeout(() => { fn(); }, ms);
+  _finaleTimers.push(id);
+  return id;
+}
+function _clearFinaleTimers(){
+  _finaleTimers.forEach(id => clearTimeout(id));
+  _finaleTimers = [];
+}
+
+function showFinale(winnerName){
+  /* 清理上次的定时器，避免旧回调干扰 */
+  _clearFinaleTimers();
+  /* 先关闭所有可能在前方的模态框 */
+  try { document.getElementById('modal').classList.remove('show'); } catch(e){}
+  try { document.getElementById('action-panel').classList.remove('show'); } catch(e){}
+  try { document.getElementById('card-detail-overlay').classList.remove('show'); } catch(e){}
+  window._modalCallback = null;
+
+  const overlay = document.getElementById('finale-overlay');
+  const mainStage = document.getElementById('finale-main-stage');
+
+  /* 重置：先清干净再重新播 */
+  mainStage.classList.remove('show');
+  overlay.classList.add('show');
+
+  /* 才俊索引 & 才俊 key */
+  const winnerIdx = Math.max(0, CHARACTERS.findIndex(c => c.name === winnerName));
+  const winnerKey = IDX_TO_WINNER_KEY[winnerIdx] || 'su';
+  const data = FINALE_WINNERS[winnerKey] || FINALE_WINNERS.su;
+
+  /* ========== 文本文案填充 ========== */
+  const titleEl    = document.getElementById('finale-title');
+  const dialogueEl = document.getElementById('finale-dialogue');
+  const sceneEl    = document.getElementById('finale-scene');
+  const winnerLineEl   = document.getElementById('finale-winner-line');
+  const princessLineEl = document.getElementById('finale-princess-line');
+  const epilogueTextEl = document.getElementById('finale-epilogue-text');
+  if(titleEl)    titleEl.textContent    = FINALE_DATA.sceneTitle;     /* 喜结良缘 */
+  if(dialogueEl) dialogueEl.textContent = FINALE_DATA.dialogue;       /* 恭喜公主殿下觅得良人 */
+  if(sceneEl)    sceneEl.textContent    = FINALE_DATA.sceneDesc;      /* 喜堂之前并肩而立 */
+  if(winnerLineEl)   winnerLineEl.textContent   = `${CHARACTERS[winnerIdx].name}：${data.winnerLine}`;
+  if(princessLineEl) princessLineEl.textContent = `太平公主：${data.princessLine}`;
+  if(epilogueTextEl){
+    const ep = FINALE_DATA.historyEpilogue;
+    if(Array.isArray(ep)){
+      epilogueTextEl.innerHTML = ep.map(line => `<p>${line}</p>`).join('');
+    } else {
+      epilogueTextEl.innerHTML = `<p>${ep}</p>`;
+    }
+  }
+
+  /* ========== 图片触发（三层） ========== */
+  // 1. 喜堂背景
+  const bgImg = document.getElementById('finale-bg-img');
+  if(bgImg){
+    const bgFallbacks = [
+      'picture/wedding/wedding.png',
+      'picture/wedding/princess.png',
+      'picture/8公主.png'
+    ];
+    let bi = 0;
+    const tryBg = () => {
+      if(bi >= bgFallbacks.length){ bgImg.style.visibility = 'hidden'; return; }
+      const src = bgFallbacks[bi++];
+      bgImg.onerror = () => { bgImg.onerror = null; tryBg(); };
+      bgImg.onload  = () => { bgImg.onerror = null; bgImg.style.visibility = ''; };
+      bgImg.src = src;
+    };
+    tryBg();
+  }
+  // 2. 公主图（左）
+  const princessImg = document.getElementById('finale-princess-img');
+  if(princessImg){
+    princessImg.onerror = null;
+    princessImg.onload = null;
+    princessImg.src = 'picture/wedding/princess.png';
+    princessImg.onerror = () => {
+      // 找不到 wedding 版公主就回退到原大图
+      princessImg.onerror = null;
+      princessImg.src = 'picture/8公主.png';
+    };
+  }
+  // 3. 才俊图（右）
+  const winnerImg = document.getElementById('finale-winner-img');
+  if(winnerImg){
+    winnerImg.onerror = null;
+    winnerImg.onload = null;
+    winnerImg.src = `picture/wedding/${winnerKey}.png`;
+    winnerImg.onerror = () => {
+      // 找不到单人婚礼图 → 回退到喜堂主图 → 最后隐藏
+      winnerImg.onerror = null;
+      winnerImg.src = `picture/wedding/wedding.png`;
+      winnerImg.onerror = () => {
+        winnerImg.onerror = null;
+        winnerImg.style.visibility = 'hidden';
+      };
+    };
+  }
+  // 4. flower（最上图层）
+  const flowerEl = document.querySelector('.finale-flower');
+  if(flowerEl){
+    flowerEl.onerror = () => { flowerEl.style.visibility = 'hidden'; };
+    flowerEl.style.visibility = '';
+    flowerEl.src = 'picture/wedding/wedding_flower.png';
+  }
+
+  /* ========== 显示喜堂 ========== */
+  // 先把 .in 类去掉，保证第二次进入动画会重新触发
+  const toRemoveIn = mainStage.querySelectorAll('.in');
+  toRemoveIn.forEach(n => n.classList.remove('in'));
+  mainStage.classList.add('show');
+
+  // 分阶段淡入：标题 → 恭喜 → 场景句 → 舞台图（含双人+花）→ 才俊台词气泡 → 才俊voice → 公主voice → 后记
+  _finaleTimeout(() => titleEl    && titleEl.classList.add('in'),    300);
+  _finaleTimeout(() => dialogueEl && dialogueEl.classList.add('in'), 900);
+  _finaleTimeout(() => sceneEl    && sceneEl.classList.add('in'),   1500);
+  _finaleTimeout(() => {
+    const stage = document.getElementById('finale-stage');
+    if(stage) stage.classList.add('in');
+  }, 2100);
+
+  /* 才俊 voice + 公主 voice 顺序播放（才俊 ended 之后公主才开始） */
+  const princessLineBubbleAt = () => princessLineEl && princessLineEl.classList.add('in');
+  const winnerLineBubbleAt   = () => winnerLineEl   && winnerLineEl.classList.add('in');
+
+  // 才俊气泡和 voice 一起出来
+  _finaleTimeout(() => {
+    winnerLineBubbleAt();
+    AudioSystem.voice(data.winnerVoice, 0, () => {
+      // 才俊voice播完 → 公主气泡+voice
+      princessLineBubbleAt();
+      AudioSystem.voice(data.princessVoice, 0, () => {
+        // 公主 voice 播完 → 2.5秒后淡入后记区域（不清屏，上下结构）
+        _finaleTimeout(() => {
+          const epSection = document.getElementById('finale-epilogue-section');
+          if(epSection) epSection.classList.add('in');
+        }, 2500);
+      });
+    });
+  }, 2900);
+
+  /* 婚礼专属 BGM：覆盖旧 BGM（stopBgm 立即停止+延后创建，避免并行） */
+  AudioSystem.playWeddingBgm();
+}
+
+/* 关闭结局：清理定时器 + 隐藏 + 停 weddingBGM + 回菜单 */
+function closeFinale(){
+  _clearFinaleTimers();
+  const overlay = document.getElementById('finale-overlay');
+  const mainStage = document.getElementById('finale-main-stage');
+  if(mainStage){ mainStage.classList.remove('show'); mainStage.style.display = ''; }
+  if(overlay) overlay.classList.remove('show');
+  AudioSystem.stopBgm(true);
+  doExitToMenu();
+}
+
+/* ===== 日志系统（重构版） =====
+ * 所有 log() 调用都必须传 speakerKey，用 speakerKey 硬映射颜色，不再猜测文本。
+ * speakerKey 取值：
+ *   'system'      → 系统（灰）
+ *   'event'       → 事件（金）
+ *   'me'          → 玩家（绿）
+ *   'p1'          → 玩家id=1（红）
+ *   'p2'          → 玩家id=2（青）
+ *   'p3'          → 玩家id=3（橙）
+ *   'p4'          → 玩家id=4（紫）
+ *   直接传 playerId 数字也可以，0 → 'me', 1..4 → 'p1'..'p4'
+ */
+const LOG_COLORS = {
+  system: '#8a8099',
+  event:  '#d4af37',
+  me:     '#2ecc71',
+  p0:     '#2ecc71',
+  p1:     '#e74c3c',
+  p2:     '#3498db',
+  p3:     '#f39c12',
+  p4:     '#9b59b6'
+};
+function speakerKeyOf(key){
+  if(typeof key === 'number'){
+    return key === 0 ? 'me' : 'p' + key;
+  }
+  return key;
+}
+function log(speakerKey, msg){
+  if(!G) return;
+  const sk = speakerKeyOf(speakerKey);
+  G.log.push({ speaker: sk, msg: msg });
+  const logEl = document.getElementById('game-log');
+  if(!logEl) return;
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.dataset.speaker = sk;
+  const color = LOG_COLORS[sk] || '#cfc2b6';
+  entry.style.color = color;
+  entry.style.borderLeftColor = color;
+  /* 头像小徽章（如有） */
+  let prefix = '';
+  if(sk === 'me'){ prefix = '🟢 '; }
+  else if(sk === 'p1'){ prefix = '🔴 '; }
+  else if(sk === 'p2'){ prefix = '🔵 '; }
+  else if(sk === 'p3'){ prefix = '🟠 '; }
+  else if(sk === 'p4'){ prefix = '🟣 '; }
+  else if(sk === 'event'){ prefix = '✨ '; }
+  else if(sk === 'system'){ prefix = '· '; }
+  entry.innerHTML = prefix + msg;
+  logEl.appendChild(entry);
+  requestAnimationFrame(() => { logEl.scrollTop = logEl.scrollHeight; });
+  /* 保留最近 60 条 */
+  while(logEl.children.length > 60){
+    logEl.removeChild(logEl.firstChild);
+  }
+}
+/* 清空日志 */
+function clearLog(){
+  const logEl = document.getElementById('game-log');
+  if(logEl) logEl.innerHTML = '';
+  if(G) G.log = [];
+}
+
+/* ===== 场景切换 ===== */
+function showMenu(){
+  for(const s of document.querySelectorAll('.scene')){
+    s.classList.remove('active');
+  }
+  document.getElementById('scene-menu').classList.add('active');
+  AudioSystem.playBgm('menu');
+}
+
+function showSetup(){
+  for(const s of document.querySelectorAll('.scene')){
+    s.classList.remove('active');
+  }
+  document.getElementById('scene-setup').classList.add('active');
+}
+
+function showRules(){
+  for(const s of document.querySelectorAll('.scene')){
+    s.classList.remove('active');
+  }
+  document.getElementById('scene-rules').classList.add('active');
+}
+
+/* ===== 查看人物牌 ===== */
+function showCharacters(){
+  for(const s of document.querySelectorAll('.scene')){
+    s.classList.remove('active');
+  }
+  document.getElementById('scene-characters').classList.add('active');
+  renderCharacterGrid();
+}
+
+function renderCharacterGrid(){
+  const grid = document.getElementById('char-grid');
+  const defs = Object.entries(CARD_DEFS).sort((a,b) => a[1].value - b[1].value);
+  let html = '';
+  for(const [type, def] of defs){
+    if(type==='baron' || type==='handmaid' || type==='prince'){
+      const tempCard1 = { value: def.value, variant: 1, type: type };
+      const imgSrc1 = getCardImage(tempCard1);
+      html += `
+      <div class="char-cell" onclick="showCardDetail('${imgSrc1}','${def.name}',${def.value},${def.count},'${def.desc.replace(/'/g,"\\'")}')">
+        <img src="${imgSrc1}" alt="${def.name}">
+        <div class="cc-name">${def.name}</div>
+        <div class="cc-val">点数 ${def.value} · 共 ${def.count} 张</div>
+        <div class="cc-desc">${def.desc}</div>
+      </div>
+    `;
+      const tempCard2 = { value: def.value, variant: 2, type: type };
+      const imgSrc2 = getCardImage(tempCard2);
+      html += `
+      <div class="char-cell" onclick="showCardDetail('${imgSrc2}','${def.name} ②',${def.value},${def.count},'${def.desc.replace(/'/g,"\\'")}')">
+        <img src="${imgSrc2}" alt="${def.name} ②">
+        <div class="cc-name">${def.name} ②</div>
+        <div class="cc-val">点数 ${def.value} · 共 ${def.count} 张</div>
+        <div class="cc-desc">${def.desc}</div>
+      </div>
+    `;
+    } else {
+      const tempCard = { value: def.value, variant: null, type: type };
+      const imgSrc = getCardImage(tempCard);
+      html += `
+      <div class="char-cell" onclick="showCardDetail('${imgSrc}','${def.name}',${def.value},${def.count},'${def.desc.replace(/'/g,"\\'")}')">
+        <img src="${imgSrc}" alt="${def.name}">
+        <div class="cc-name">${def.name}</div>
+        <div class="cc-val">点数 ${def.value} · 共 ${def.count} 张</div>
+        <div class="cc-desc">${def.desc}</div>
+      </div>
+    `;
+    }
+  }
+  grid.innerHTML = html;
+}
+
+/* 卡牌放大查看 */
+function showCardDetail(imgSrc, name, value, count, desc){
+  const overlay = document.getElementById('card-detail-overlay');
+  const inner = document.getElementById('card-detail-inner');
+  inner.innerHTML = `
+    <img class="cd-img" src="${imgSrc}" alt="${name}">
+    <div class="cd-name">${name}</div>
+    <div class="cd-val">点数 ${value} · 共 ${count} 张</div>
+    <div class="cd-desc">${desc}</div>
+    <div class="cd-hint">点击任意处关闭</div>
+  `;
+  overlay.classList.add('show');
+}
+
+function hideCardDetail(){
+  document.getElementById('card-detail-overlay').classList.remove('show');
+}
+
+/* 双击手牌放大查看 */
+function showHandCardDetail(cardIndex){
+  if(!G || !G.players) return;
+  const myId = G.myPlayerId !== undefined ? G.myPlayerId : 0;
+  const player = G.players.find(p => p.id === myId) || G.players[0];
+  if(!player) return;
+  const card = player.hand[cardIndex];
+  if(!card) return;
+  const imgSrc = getCardImage(card);
+  const count = CARD_DEFS[card.type] ? CARD_DEFS[card.type].count : 1;
+  showCardDetail(imgSrc, card.name, card.value, count, card.desc);
+}
+
+/* ===== 游戏中返回主菜单 ===== */
+function confirmExitGame(){
+  const modal = document.getElementById('modal');
+  const content = document.getElementById('modal-content');
+  // 如果对局进行中，先确认
+  if(G && G.phase !== 'end' && G.phase !== 'menu' && G.phase !== 'over'){
+    content.innerHTML = `
+      <h2>返回主菜单</h2>
+      <p>当前对局尚未结束，确定要退出吗？</p>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button class="modal-btn" style="background:linear-gradient(135deg,var(--red),#7a1f15);border-color:var(--red);" onclick="doExitToMenu()">确定退出</button>
+        <button class="modal-btn" onclick="closeModalOnly()">取消</button>
+      </div>
+    `;
+    window._modalCallback = null;
+    modal.classList.add('show');
+  } else {
+    doExitToMenu();
+  }
+}
+
+function closeModalOnly(){
+  document.getElementById('modal').classList.remove('show');
+}
+
+function doExitToMenu(){
+  // 关闭弹窗与面板
+  document.getElementById('action-panel').classList.remove('show');
+  document.getElementById('modal').classList.remove('show');
+  document.getElementById('play-zone').classList.remove('show');
+  G = null;
+  showMenu();
+}
+
+let selectedPlayerCount = 1;
+let selectedDifficulty = 'normal';
+
+function selectPlayerCount(count){
+  selectedPlayerCount = count;
+  document.querySelectorAll('.pc-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelector(`.pc-btn[data-count="${count}"]`).classList.add('selected');
+}
+
+function selectDifficulty(diff){
+  selectedDifficulty = diff;
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelector(`.diff-btn[data-diff="${diff}"]`).classList.add('selected');
+}
+
+function startGame(){
+  for(const s of document.querySelectorAll('.scene')){
+    s.classList.remove('active');
+  }
+  document.getElementById('scene-game').classList.add('active');
+  document.getElementById('game-log').innerHTML = '';
+  initGame(selectedPlayerCount, selectedDifficulty);
+}
+
+/* ============================================================
+ * 联机对战系统（PeerJS WebRTC P2P）
+ * 房主权威模型：房主运行游戏引擎，客户端只渲染+发送操作
+ * ============================================================ */
+
+/* ===== 网络层：PeerJS 连接管理 ===== */
+const MP = {
+  peer: null,
+  isHost: false,
+  roomCode: null,
+  /* 房主：connections[connId] = DataConnection */
+  conns: {},
+  /* 玩家信息列表（大厅用）: {id, name, isAI, isLocal, connId, ready} */
+  lobbyPlayers: [],
+  myName: '玩家1',
+  myLobbyId: 0,
+  npcCount: 1,
+  /* 游戏中：远程玩家 playerId → connId 映射 */
+  playerConnMap: {},
+  /* 远程操作回调：等待客户端响应 */
+  pendingResponse: null,
+
+  /* 生成 6 位房间号 */
+  genCode(){
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for(let i=0; i<6; i++) s += chars[Math.floor(Math.random()*chars.length)];
+    return s;
+  },
+
+  /* 房主：创建房间 */
+  host(){
+    this.isHost = true;
+    this.roomCode = this.genCode();
+    this.lobbyPlayers = [{id:0, name:this.myName, isAI:false, isLocal:true, ready:true}];
+    this.peer = new Peer('llt-' + this.roomCode, {debug:1});
+    this.peer.on('open', () => {
+      MPUI.showRoom();
+    });
+    this.peer.on('connection', (conn) => {
+      conn.on('open', () => {
+        this.conns[conn.id] = conn;
+      });
+      conn.on('data', (data) => {
+        this.onData(conn, data);
+      });
+      conn.on('close', () => {
+        this.onDisconnect(conn);
+      });
+    });
+    this.peer.on('error', (err) => {
+      console.error('[MP] Host error:', err);
+      if(err.type === 'unavailable-id'){
+        // 房间号冲突，重新生成
+        this.peer.destroy();
+        this.host();
+      }
+    });
+  },
+
+  /* 客户端：加入房间 */
+  join(code){
+    this.isHost = false;
+    this.roomCode = code;
+    this.peer = new Peer({debug:1});
+    this.peer.on('open', () => {
+      const conn = this.peer.connect('llt-' + code, {reliable:true});
+      conn.on('open', () => {
+        this.conns[conn.id] = conn;
+        this.myConnId = conn.id;
+        conn.send({type:'join', name:this.myName});
+        MPUI.showRoom();
+      });
+      conn.on('data', (data) => {
+        this.onHostData(data);
+      });
+      conn.on('close', () => {
+        this.onHostDisconnect();
+      });
+    });
+    this.peer.on('error', (err) => {
+      console.error('[MP] Client error:', err);
+      document.getElementById('mp-status').textContent = '连接失败：房间号无效或房主不在线';
+    });
+  },
+
+  /* 房主：收到客户端数据 */
+  onData(conn, data){
+    if(data.type === 'join'){
+      // 新玩家加入大厅
+      const newId = this.lobbyPlayers.length;
+      this.lobbyPlayers.push({id:newId, name:data.name||`玩家${newId+1}`, isAI:false, isLocal:false, connId:conn.id, ready:true});
+      this.broadcastLobby();
+    } else if(data.type === 'rename'){
+      const p = this.lobbyPlayers.find(p => p.connId === conn.id);
+      if(p){ p.name = data.name; this.broadcastLobby(); }
+    } else if(data.type === 'action'){
+      // 游戏中客户端操作
+      if(this.pendingResponse){
+        const cb = this.pendingResponse;
+        this.pendingResponse = null;
+        cb(data);
+      }
+    } else if(data.type === 'leave'){
+      this.onDisconnect(conn);
+    }
+  },
+
+  /* 客户端：收到房主数据 */
+  onHostData(data){
+    if(data.type === 'lobby'){
+      MPUI.renderLobbyFromHost(data.lobby);
+    } else if(data.type === 'gameStart'){
+      NetClient.onGameStart(data);
+    } else if(data.type === 'state'){
+      NetClient.onState(data);
+    } else if(data.type === 'yourTurn'){
+      NetClient.onYourTurn(data);
+    } else if(data.type === 'actionRequest'){
+      NetClient.onActionRequest(data);
+    } else if(data.type === 'log'){
+      NetClient.onLog(data);
+    } else if(data.type === 'roundEnd'){
+      NetClient.onRoundEnd(data);
+    } else if(data.type === 'gameEnd'){
+      NetClient.onGameEnd(data);
+    } else if(data.type === 'turnIndicator'){
+      NetClient.onTurnIndicator(data);
+    } else if(data.type === 'kicked'){
+      alert('你已被移出房间');
+      this.disconnect();
+      showMenu();
+    }
+  },
+
+  /* 房主：广播大厅状态 */
+  broadcastLobby(){
+    this.broadcast({type:'lobby', lobby:{roomCode:this.roomCode, players:this.lobbyPlayers.map(p=>({name:p.name,isAI:p.isAI,isLocal:p.isLocal}))}});
+    MPUI.renderPlayerList();
+  },
+
+  /* 房主：广播消息给所有客户端 */
+  broadcast(msg){
+    for(const id in this.conns){
+      try { this.conns[id].send(msg); } catch(e){ console.error('[MP] broadcast err:', e); }
+    }
+  },
+
+  /* 房主：发送消息给指定玩家 */
+  sendToPlayer(playerId, msg){
+    const connId = this.playerConnMap[playerId];
+    if(connId && this.conns[connId]){
+      try { this.conns[connId].send(msg); } catch(e){ console.error('[MP] send err:', e); }
+    }
+  },
+
+  /* 客户端：发送消息给房主 */
+  sendToHost(msg){
+    const conn = this.conns[this.myConnId];
+    if(conn){ try { conn.send(msg); } catch(e){ console.error('[MP] client send err:', e); } }
+  },
+
+  /* 房主：等待客户端响应 */
+  waitForResponse(playerId, timeout){
+    return new Promise((resolve) => {
+      this.pendingResponse = resolve;
+      if(timeout){
+        setTimeout(() => {
+          if(this.pendingResponse === resolve){
+            this.pendingResponse = null;
+            resolve(null);
+          }
+        }, timeout);
+      }
+    });
+  },
+
+  /* 断开连接处理 */
+  onDisconnect(conn){
+    delete this.conns[conn.id];
+    if(this.isHost){
+      const p = this.lobbyPlayers.find(p => p.connId === conn.id);
+      if(p){
+        this.lobbyPlayers = this.lobbyPlayers.filter(x => x.connId !== conn.id);
+        // 重新编号
+        this.lobbyPlayers.forEach((p,i) => p.id = i);
+        this.broadcastLobby();
+      }
+    }
+  },
+
+  onHostDisconnect(){
+    alert('与房主断开连接');
+    this.disconnect();
+    showMenu();
+  },
+
+  /* 完全断开 */
+  disconnect(){
+    if(this.peer){ try { this.peer.destroy(); } catch(e){} }
+    this.peer = null;
+    this.conns = {};
+    this.lobbyPlayers = [];
+    this.isHost = false;
+    this.roomCode = null;
+    this.playerConnMap = {};
+    this.pendingResponse = null;
+  },
+
+  /* ============================================================
+   * 局域网/自定义服务器模式（WebSocket 中继）
+   * - 通过 lan-server.js 作为中继服务器
+   * - 消息在 lan-server 中以 net.xxx 前缀转发，这里发送/接收时自动加/剥前缀
+   * - 房主 / 玩家逻辑与 PeerJS 模式几乎一致（同一套 MPUI 与 NetHost/NetClient）
+   * ============================================================ */
+  transportMode: 'peerjs', // 'peerjs' | 'lanws'
+  lanWS: null,
+  lanServerUrl: '',
+  lanConnId: -1, // 自己在 LAN 服务器分配到的 id（房主=0）
+
+  /* 发送"加前缀 net."的消息：局域网 WS 中继只转发带 net. 前缀的消息 */
+  _lanSend(obj){
+    if(!this.lanWS || this.lanWS.readyState !== 1) return;
+    try {
+      // 每个 LAN 模式的游戏内消息都加 type:'net.XXX'
+      const payload = Object.assign({}, obj);
+      if(!String(obj.type).startsWith('net.')) payload.type = 'net.' + obj.type;
+      this.lanWS.send(JSON.stringify(payload));
+    } catch(e){ console.error('[MP.lan] send err', e); }
+  },
+
+  /* 剥去 net. 前缀，还原成与 PeerJS 相同的内部数据结构 */
+  _stripNet(msg){
+    if(!msg) return msg;
+    const out = Object.assign({}, msg);
+    if(typeof out.type === 'string' && out.type.startsWith('net.')){
+      out.type = out.type.slice(4);
+    }
+    return out;
+  },
+
+  /* 房主：通过 WebSocket 服务器创建房间 */
+  lanHost(serverUrl){
+    this.disconnect();
+    this.transportMode = 'lanws';
+    this.lanServerUrl = serverUrl;
+    this.isHost = true;
+    this.roomCode = this.genCode();
+    this.lobbyPlayers = [{id:0, name:this.myName, isAI:false, isLocal:true, ready:true}];
+
+    try {
+      this.lanWS = new WebSocket(serverUrl);
+    } catch(e){
+      document.getElementById('mp-status').textContent = '无法连接服务器：' + (e.message || e);
+      return;
+    }
+    this.lanWS.addEventListener('open', () => {
+      this.lanWS.send(JSON.stringify({ type:'lan.create', roomId: this.roomCode, name: this.myName }));
+    });
+    this.lanWS.addEventListener('message', (ev) => this._onLanMessage(ev.data));
+    this.lanWS.addEventListener('close', () => this._onLanClose());
+    this.lanWS.addEventListener('error', (e) => {
+      console.error('[MP.lan] sock err', e);
+      document.getElementById('mp-status').textContent = '服务器连接失败，请检查地址是否正确';
+    });
+  },
+
+  /* 玩家：通过 WebSocket 服务器加入房间 */
+  lanJoin(serverUrl, roomCode){
+    this.disconnect();
+    this.transportMode = 'lanws';
+    this.lanServerUrl = serverUrl;
+    this.isHost = false;
+    this.roomCode = roomCode;
+
+    try {
+      this.lanWS = new WebSocket(serverUrl);
+    } catch(e){
+      document.getElementById('mp-status').textContent = '无法连接服务器：' + (e.message || e);
+      return;
+    }
+    this.lanWS.addEventListener('open', () => {
+      this.lanWS.send(JSON.stringify({ type:'lan.join', roomId: roomCode, name: this.myName }));
+    });
+    this.lanWS.addEventListener('message', (ev) => this._onLanMessage(ev.data));
+    this.lanWS.addEventListener('close', () => this._onLanClose());
+    this.lanWS.addEventListener('error', (e) => {
+      console.error('[MP.lan] sock err', e);
+      document.getElementById('mp-status').textContent = '服务器连接失败，请检查地址是否正确';
+    });
+  },
+
+  _onLanMessage(raw){
+    let msg; try { msg = JSON.parse(raw); } catch { return; }
+    // 大厅管理：服务器主动推送 lobbyUpdate（连接/断开后推送）
+    if(msg.type === 'lan.created'){
+      this.lanConnId = msg.yourId || 0;
+      MPUI.showRoom();
+      return;
+    }
+    if(msg.type === 'lan.joined'){
+      this.lanConnId = msg.yourId;
+      this.myConnId = 'lan_' + this.lanConnId; // 虚拟 connId（与 PeerJS 的 conn.id 对齐）
+      this.conns[this.myConnId] = { id: this.myConnId, _lan: true };
+      MPUI.showRoom();
+      return;
+    }
+    if(msg.type === 'lan.error'){
+      document.getElementById('mp-status').textContent = '错误：' + (msg.message || msg.code || '未知');
+      return;
+    }
+    if(msg.type === 'lan.lobbyUpdate'){
+      // 所有玩家都会收到；非房主只显示列表；房主需要同步 lobbyPlayers
+      if(this.isHost){
+        // 把服务器玩家列表同步进 lobbyPlayers（房主本地已存在id=0）
+        const remoteIds = new Set(msg.players.map(p => p.id));
+        // 保留本地的 AI 玩家（它们不会出现在服务器玩家列表）
+        this.lobbyPlayers = this.lobbyPlayers.filter(p => p.isAI || p.isLocal || remoteIds.has(p.id));
+        for(const rp of msg.players){
+          const exists = this.lobbyPlayers.find(p => p.id === rp.id);
+          if(rp.isHost){
+            // 房主本人：同步 id=0
+            const me = this.lobbyPlayers.find(p => p.id === 0);
+            if(me) me.name = rp.name;
+          } else if(!exists){
+            this.lobbyPlayers.push({ id: rp.id, name: rp.name, isAI: false, isLocal: false, connId: 'lan_' + rp.id, ready: true });
+          } else {
+            exists.name = rp.name;
+            exists.connId = 'lan_' + rp.id;
+          }
+        }
+        // 重新编号并建立玩家 id → connId
+        this.lobbyPlayers.forEach((p,i) => { if(p.id !== i) p.id = i; });
+        // 广播一份与 PeerJS 模式一致的大厅信息给所有非房主连接
+        this.broadcastLobby();
+      } else {
+        // 非房主：直接渲染（配合 MPUI 的 renderLobbyFromHost 格式）
+        MPUI.renderLobbyFromHost({
+          roomCode: this.roomCode,
+          players: msg.players.map(p => ({ name:p.name, isAI:false, isLocal: p.id === this.lanConnId }))
+        });
+      }
+      return;
+    }
+    if(msg.type === 'lan.hostChanged'){
+      this.lanConnId = msg.yourId || 0;
+      return;
+    }
+
+    /* 游戏内消息：前缀 net. —— 与 PeerJS 模式 onData/onHostData 对齐 */
+    if(msg.type && msg.type.startsWith('net.')){
+      const inner = this._stripNet(msg);
+      if(this.isHost){
+        // 房主：来自玩家的消息，需要知道"connId"=lan_fromId；fromId 由服务端 lanConnId 映射
+        const fromId = inner.fromId !== undefined ? inner.fromId : (msg.fromId !== undefined ? msg.fromId : null);
+        // 构造 virtual conn
+        const vId = 'lan_' + (fromId !== null ? fromId : (inner.playerId !== undefined ? inner.playerId : '?'));
+        const vconn = { id: vId, _lan: true };
+        this.onData(vconn, inner);
+      } else {
+        // 非房主：接收房主数据
+        this.onHostData(inner);
+      }
+      return;
+    }
+  },
+
+  _onLanClose(){
+    if(this.transportMode !== 'lanws') return;
+    this.onHostDisconnect && this.onHostDisconnect();
+  },
+
+  /* 覆盖：LAN 模式下广播消息（房主→所有玩家） */
+  _patchTransportForLan(){
+    // 注入"包装层"：如果 transportMode===lanws，就替换 broadcast/sendToHost/sendToPlayer
+    // 但为了不破坏原函数，这里用 getter+分支（直接在调用方判断即可，见下面广播包装）
+  }
+};
+
+/* ---- 发送函数包装：根据 transportMode 路由 ----
+   因为 MP.broadcast / sendToHost / sendToPlayer 已有实现，
+   这里在它们的外层包装一层：保留原函数到 _peer_xxx，然后替换成路由函数。
+*/
+(function patchMPTransport(){
+  const orig = {
+    broadcast: MP.broadcast,
+    sendToHost: MP.sendToHost,
+    sendToPlayer: MP.sendToPlayer,
+    disconnect: MP.disconnect,
+  };
+  MP.broadcast = function(msg){
+    if(MP.transportMode === 'lanws'){
+      MP._lanSend(msg); // 房主发送 net.*，服务端广播给所有玩家
+    } else {
+      orig.broadcast.call(MP, msg);
+    }
+  };
+  MP.sendToPlayer = function(playerId, msg){
+    if(MP.transportMode === 'lanws'){
+      const payload = Object.assign({}, msg, { toPlayerId: playerId });
+      MP._lanSend(payload); // lan-server 识别 toPlayerId → 单播
+    } else {
+      orig.sendToPlayer.call(MP, playerId, msg);
+    }
+  };
+  MP.sendToHost = function(msg){
+    if(MP.transportMode === 'lanws'){
+      MP._lanSend(msg); // 玩家发送 net.*，服务端只转发给房主
+    } else {
+      orig.sendToHost.call(MP, msg);
+    }
+  };
+  MP.disconnect = function(){
+    // 两种模式都清理
+    if(MP.lanWS){ try { MP.lanWS.close(); } catch(e){} MP.lanWS = null; }
+    MP.transportMode = 'peerjs';
+    MP.lanServerUrl = '';
+    MP.lanConnId = -1;
+    orig.disconnect.call(MP);
+  };
+})();
+
+
+/* ===== 联机 UI 管理 ===== */
+const MPUI = {
+  showLobby(){
+    showScene('mp-lobby');
+    document.getElementById('mp-join-form').style.display = 'none';
+    document.getElementById('mp-status').textContent = '';
+  },
+
+  /* 模式切换 Tab：peerjs / lanws（互联网版仅 PeerJS，无需切换） */
+  setMode(mode){ /* no-op */ },
+
+  createRoom(){
+    MP.myName = '玩家1';
+    MP.host();
+  },
+
+  showJoinForm(){
+    document.getElementById('mp-join-form').style.display = 'block';
+  },
+
+  joinRoom(){
+    const code = document.getElementById('mp-room-input').value.trim().toUpperCase();
+    if(!code){ document.getElementById('mp-status').textContent = '请输入房间号'; return; }
+    MP.myName = '玩家1';
+    document.getElementById('mp-status').textContent = '连接中...';
+    MP.join(code);
+  },
+
+  showRoom(){
+    showScene('mp-room');
+    document.getElementById('mp-my-name').value = MP.myName;
+    this.renderPlayerList();
+  },
+
+  updateName(name){
+    MP.myName = name;
+    if(MP.isHost){
+      const me = MP.lobbyPlayers.find(p => p.isLocal);
+      if(me){ me.name = name; MP.broadcastLobby(); }
+    } else {
+      MP.sendToHost({type:'rename', name:name});
+    }
+  },
+
+  selectNPC(n){
+    MP.npcCount = n;
+    document.querySelectorAll('[data-npc]').forEach(b => b.classList.remove('selected'));
+    document.querySelector(`[data-npc="${n}"]`).classList.add('selected');
+  },
+
+  startOnlineGame(){
+    const humanCount = MP.lobbyPlayers.length;
+    const total = humanCount + MP.npcCount;
+    if(total < 2){ alert('至少需要2名玩家'); return; }
+    if(total > 4){ alert('最多4名玩家'); return; }
+    NetHost.startGame(MP.lobbyPlayers, MP.npcCount);
+  },
+
+  leaveRoom(){
+    if(MP.peer){
+      if(!MP.isHost) MP.sendToHost({type:'leave'});
+      MP.disconnect();
+    }
+    showMenu();
+  },
+
+  renderPlayerList(){
+    const el = document.getElementById('mp-player-list');
+    if(!el) return;
+    const players = MP.lobbyPlayers;
+    let html = '';
+    for(const p of players){
+      const tag = p.isLocal ? '（你）' : p.isAI ? ' NPC' : '';
+      html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(0,0,0,0.3);border-radius:8px;border:1px solid var(--gold-dim);">
+        <span style="color:var(--gold);font-weight:bold;">${p.id+1}</span>
+        <span style="color:var(--text-light);">${p.name}${tag}</span>
+      </div>`;
+    }
+    // 预览NPC
+    for(let i=0; i<MP.npcCount; i++){
+      html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid rgba(255,255,255,0.1);">
+        <span style="color:var(--gold);font-weight:bold;">${players.length+i+1}</span>
+        <span style="color:var(--text-dim);">NPC ${i+1}</span>
+      </div>`;
+    }
+    el.innerHTML = html;
+
+    // 房主控件
+    document.getElementById('mp-host-controls').style.display = MP.isHost ? 'block' : 'none';
+    document.getElementById('mp-client-wait').style.display = MP.isHost ? 'none' : 'block';
+    // 房间号显示（房主有复制按钮 + 二维码）
+    const codeEl = document.getElementById('mp-room-code-display');
+    if(MP.isHost){
+      codeEl.innerHTML = `
+        <div style="font-size:0.95rem;color:var(--text-light);margin-bottom:6px;">房间号</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+          <span style="font-size:1.8rem;color:var(--gold);letter-spacing:4px;font-weight:bold;">${MP.roomCode}</span>
+          <button onclick="MPUI.copyRoomCode()" title="复制房间号" style="background:rgba(0,0,0,0.5);border:1px solid var(--gold-dim);border-radius:8px;color:var(--gold);cursor:pointer;padding:8px 12px;font-size:1rem;transition:all .2s;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-dim)'">📋 复制</button>
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;">分享给好友加入</div>
+        <div id="mp-qr-toggle-btn" style="margin-top:10px;">
+          <button onclick="MPUI.toggleQR()" style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:0.85rem;text-decoration:underline;">生成二维码扫码加入</button>
+        </div>
+        <div id="mp-qr-container" style="display:none;margin-top:12px;justify-content:center;">
+          <div id="mp-qr-canvas" style="display:inline-block;padding:12px;background:white;border-radius:8px;"></div>
+          <div style="font-size:0.78rem;color:var(--text-dim);margin-top:6px;">扫二维码打开游戏并输入房间号</div>
+        </div>
+      `;
+    } else {
+      codeEl.innerHTML = `已加入房间：<span style="font-size:1.3rem;color:var(--gold);letter-spacing:2px;">${MP.roomCode}</span>`;
+    }
+  },
+
+  /* 客户端：从房主收到大厅状态 */
+  renderLobbyFromHost(lobby){
+    MP.roomCode = lobby.roomCode;
+    MP.lobbyPlayers = lobby.players.map((p, i) => ({
+      id: i, name: p.name, isAI: p.isAI, isLocal: (p.name === MP.myName && !p.isAI), ready: true
+    }));
+    this.renderPlayerList();
+  },
+
+  /* 复制房间号到剪贴板 */
+  copyRoomCode(){
+    const code = MP.roomCode || '';
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(code).then(() => {
+        this._flashCopyBtn('✅ 已复制');
+      }).catch(() => { this._fallbackCopy(code); });
+    } else {
+      this._fallbackCopy(code);
+    }
+  },
+  _fallbackCopy(text){
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); this._flashCopyBtn('✅ 已复制'); }
+    catch(e){ this._flashCopyBtn('❌ 复制失败'); }
+    document.body.removeChild(ta);
+  },
+  _flashCopyBtn(msg){
+    const btn = document.querySelector('#mp-room-code-display button[title="复制房间号"]');
+    if(!btn) return;
+    const orig = btn.textContent;
+    btn.textContent = msg;
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  },
+
+  /* 生成/切换二维码显示 */
+  toggleQR(){
+    const container = document.getElementById('mp-qr-container');
+    const canvas = document.getElementById('mp-qr-canvas');
+    if(!container || !canvas) return;
+    if(container.style.display === 'none'){
+      container.style.display = 'flex';
+      canvas.innerHTML = '';
+      // 二维码内容：当前页面 URL（带上房间码参数，方便扫码后自动填入）
+      const url = new URL(location.href);
+      url.searchParams.set('room', MP.roomCode || '');
+      if(typeof QRCode !== 'undefined'){
+        new QRCode(canvas, { text: url.toString(), width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
+      } else {
+        canvas.innerHTML = '<div style="color:#333;padding:20px;">二维码库加载失败</div>';
+      }
+    } else {
+      container.style.display = 'none';
+    }
+  },
+};
+
+/* ===== 房主端：网络游戏管理 ===== */
+const NetHost = {
+  startGame(lobbyPlayers, npcCount){
+    const totalPlayers = lobbyPlayers.length + npcCount;
+    const tokensNeeded = totalPlayers===2 ? 7 : totalPlayers===3 ? 5 : 4;
+
+    // 切换到游戏场景（房主端）
+    showScene('game');
+    const logEl = document.getElementById('game-log');
+    if(logEl) logEl.innerHTML = '';
+
+    // 从5个角色中随机抽取
+    const pool = shuffle([...CHARACTERS]);
+    const chosen = pool.slice(0, totalPlayers);
+
+    // 创建玩家
+    const players = [];
+    // 房主（本地）
+    players.push({
+      id:0, name:`${lobbyPlayers[0].name}·${chosen[0].name}`, charName:chosen[0].name, avatar:chosen[0].icon,
+      isAI:false, isRemote:false, hand:[], alive:true, protection:false, tokens:0, knownCards:{}
+    });
+    // 远程人类玩家
+    for(let i=1; i<lobbyPlayers.length; i++){
+      const c = chosen[i];
+      players.push({
+        id:i, name:`${lobbyPlayers[i].name}·${c.name}`, charName:c.name, avatar:c.icon,
+        isAI:false, isRemote:true, connId:lobbyPlayers[i].connId, hand:[], alive:true, protection:false, tokens:0, knownCards:{}
+      });
+      MP.playerConnMap[i] = lobbyPlayers[i].connId;
+    }
+    // NPC
+    for(let i=0; i<npcCount; i++){
+      const idx = lobbyPlayers.length + i;
+      const c = chosen[idx];
+      players.push({
+        id:idx, name:`NPC·${c.name}`, charName:c.name, avatar:c.icon,
+        isAI:true, isRemote:false, hand:[], alive:true, protection:false, tokens:0, knownCards:{}, difficulty:'normal'
+      });
+    }
+
+    G = {
+      players: players,
+      deck: [], discard: [], hiddenCard: null,
+      currentPlayer: 0, round: 1, phase: 'menu',
+      selectedCard: null, pendingAction: null,
+      tokensNeeded: tokensNeeded, log: [],
+      difficulty: 'normal', playedThisRound: [],
+      isOnline: true, myPlayerId: 0
+    };
+
+    // 通知所有客户端游戏开始（给每个客户端单独发 yourId）
+    const publicPlayers = players.map(p => ({id:p.id, name:p.name, charName:p.charName, avatar:p.avatar, isAI:p.isAI, alive:true, tokens:0, handCount:0}));
+    for(const p of players){
+      if(p.isRemote){
+        MP.sendToPlayer(p.id, {
+          type:'gameStart',
+          yourId: p.id,
+          players: publicPlayers,
+          tokensNeeded: tokensNeeded
+        });
+      }
+    }
+
+    startRound();
+  },
+
+  /* 发送游戏状态给所有客户端（隐藏手牌） */
+  broadcastState(){
+    const publicPlayers = G.players.map(p => ({
+      id:p.id, name:p.name, charName:p.charName, avatar:p.avatar,
+      isAI:p.isAI, alive:p.alive, tokens:p.tokens, handCount:p.hand.length, protection:p.protection
+    }));
+    MP.broadcast({
+      type:'state',
+      players: publicPlayers,
+      currentPlayer: G.currentPlayer,
+      round: G.round,
+      phase: G.phase,
+      deckCount: G.deck.length,
+      discard: G.discard.map(c => ({name:c.name, type:c.type, value:c.value})),
+      selectedCard: G.selectedCard,
+      log: G.log.slice(-10)
+    });
+    // 给每个远程玩家单独发手牌
+    for(const p of G.players){
+      if(p.isRemote){
+        MP.sendToPlayer(p.id, {
+          type:'state',
+          players: publicPlayers,
+          currentPlayer: G.currentPlayer,
+          round: G.round,
+          phase: G.phase,
+          deckCount: G.deck.length,
+          discard: G.discard.map(c => ({name:c.name, type:c.type, value:c.value})),
+          selectedCard: G.selectedCard,
+          log: G.log.slice(-10),
+          yourHand: p.hand.map(c => ({name:c.name, type:c.type, value:c.value, desc:c.desc}))
+        });
+      }
+    }
+  },
+
+  /* 发送回合指示器 */
+  broadcastTurnIndicator(name){
+    MP.broadcast({type:'turnIndicator', name:name});
+    this.broadcastState();
+  },
+
+  /* 远程玩家回合 */
+  async remoteTurn(playerId){
+    const player = G.players[playerId];
+    if(!player || !player.alive){ afterPlay(playerId); return; }
+
+    // 1. 通知客户端轮到他了，可以抽牌
+    MP.sendToPlayer(playerId, {type:'yourTurn', phase:'draw', state:this.getClientState(playerId)});
+    // 等待抽牌
+    const drawResp = await MP.waitForResponse(playerId, 60000);
+    if(!drawResp || drawResp.action !== 'draw'){ afterPlay(playerId); return; }
+
+    // 2. 抽牌
+    if(G.deck.length === 0){ endRound(); return; }
+    const card = G.deck.pop();
+    player.hand.push(card);
+    G.phase = 'play';
+    AudioSystem.sfx('draw');
+    log('event', `${player.name} 抽了一张牌。`);
+    this.broadcastState();
+
+    // 3. 通知客户端选择出牌
+    MP.sendToPlayer(playerId, {type:'yourTurn', phase:'play', state:this.getClientState(playerId)});
+
+    // 等待选择
+    const selectResp = await MP.waitForResponse(playerId, 60000);
+    if(!selectResp){ afterPlay(playerId); return; }
+
+    // 4. 处理出牌
+    if(selectResp.action === 'play'){
+      const cardIdx = selectResp.cardIdx;
+      // 检查伯爵夫人规则
+      const hasCountess = player.hand.some(c => c.value === 7);
+      const hasKingOrPrince = player.hand.some(c => c.value === 5 || c.value === 6);
+      if(hasCountess && hasKingOrPrince && player.hand[cardIdx].value !== 7){
+        // 要求重新选择
+        MP.sendToPlayer(playerId, {type:'actionRequest', prompt:'countess', msg:'你同时持有女官和皇帝/皇子，必须打出女官！', state:this.getClientState(playerId)});
+        await MP.waitForResponse(playerId, 30000);
+        // 重新等待选择
+        MP.sendToPlayer(playerId, {type:'yourTurn', phase:'play', state:this.getClientState(playerId)});
+        const resp2 = await MP.waitForResponse(playerId, 60000);
+        if(!resp2){ afterPlay(playerId); return; }
+      }
+
+      const playedCard = player.hand.splice(cardIdx, 1)[0];
+      G.discard.push(playedCard);
+      G.playedThisRound.push({playerId, card:playedCard});
+      G.selectedCard = null;
+
+      this.broadcastState();
+      this.broadcastPlayAnimation(playerId, playedCard);
+      AudioSystem.sfx('play');
+      log('event', `${player.name} 打出了 ${playedCard.name}。`);
+
+      // 5. 执行卡牌效果（需要交互的部分问客户端）
+      this.executeRemoteCardEffect(playedCard, playerId, () => {
+        afterPlay(playerId);
+      });
+    } else {
+      afterPlay(playerId);
+    }
+  },
+
+  /* 远程玩家卡牌效果执行 */
+  async executeRemoteCardEffect(card, playerId, callback){
+    const player = G.players[playerId];
+    showSkillQuote(playerId, card);
+
+    switch(card.type){
+      case 'guard': {
+        // 选择目标
+        const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+        if(targets.length === 0){ callback(); return; }
+        MP.sendToPlayer(playerId, {type:'actionRequest', prompt:'target', targets:targets.map(p=>p.id), targetNames:targets.map(p=>p.name), card:card.type, state:this.getClientState(playerId)});
+        const targetResp = await MP.waitForResponse(playerId, 30000);
+        if(!targetResp || targetResp.action !== 'target'){ callback(); return; }
+        // 选择猜测
+        MP.sendToPlayer(playerId, {type:'actionRequest', prompt:'guess', state:this.getClientState(playerId)});
+        const guessResp = await MP.waitForResponse(playerId, 30000);
+        if(!guessResp || guessResp.action !== 'guess'){ callback(); return; }
+        doGuard(playerId, targetResp.targetId, guessResp.guess, callback);
+        break;
+      }
+      case 'priest': {
+        const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+        if(targets.length === 0){ callback(); return; }
+        MP.sendToPlayer(playerId, {type:'actionRequest', prompt:'target', targets:targets.map(p=>p.id), targetNames:targets.map(p=>p.name), card:card.type, state:this.getClientState(playerId)});
+        const resp = await MP.waitForResponse(playerId, 30000);
+        if(!resp || resp.action !== 'target'){ callback(); return; }
+        doPriest(playerId, resp.targetId, callback);
+        break;
+      }
+      case 'baron': {
+        const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+        if(targets.length === 0){ callback(); return; }
+        MP.sendToPlayer(playerId, {type:'actionRequest', prompt:'target', targets:targets.map(p=>p.id), targetNames:targets.map(p=>p.name), card:card.type, state:this.getClientState(playerId)});
+        const resp = await MP.waitForResponse(playerId, 30000);
+        if(!resp || resp.action !== 'target'){ callback(); return; }
+        doBaron(playerId, resp.targetId, callback);
+        break;
+      }
+      case 'handmaid': {
+        doHandmaid(playerId, callback);
+        break;
+      }
+      case 'prince': {
+        const targets = G.players.filter(p => p.alive);
+        MP.sendToPlayer(playerId, {type:'actionRequest', prompt:'target', targets:targets.map(p=>p.id), targetNames:targets.map(p=>p.name), card:card.type, state:this.getClientState(playerId)});
+        const resp = await MP.waitForResponse(playerId, 30000);
+        if(!resp || resp.action !== 'target'){ callback(); return; }
+        doPrince(playerId, resp.targetId, callback);
+        break;
+      }
+      case 'king': {
+        const targets = G.players.filter(p => p.id !== playerId && p.alive && !p.protection);
+        if(targets.length === 0){ callback(); return; }
+        MP.sendToPlayer(playerId, {type:'actionRequest', prompt:'target', targets:targets.map(p=>p.id), targetNames:targets.map(p=>p.name), card:card.type, state:this.getClientState(playerId)});
+        const resp = await MP.waitForResponse(playerId, 30000);
+        if(!resp || resp.action !== 'target'){ callback(); return; }
+        doKing(playerId, resp.targetId, callback);
+        break;
+      }
+      case 'countess': {
+        doCountess(playerId, callback);
+        break;
+      }
+      case 'princess': {
+        doPrincess(playerId, callback);
+        break;
+      }
+      default: callback();
+    }
+  },
+
+  /* 广播出牌动画 */
+  broadcastPlayAnimation(playerId, card){
+    MP.broadcast({type:'log', msg:`${G.players[playerId].name} 打出了 ${card.name}`});
+  },
+
+  /* 获取客户端视角的状态 */
+  getClientState(playerId){
+    return {
+      players: G.players.map(p => ({
+        id:p.id, name:p.name, charName:p.charName, avatar:p.avatar,
+        isAI:p.isAI, alive:p.alive, tokens:p.tokens, handCount:p.hand.length, protection:p.protection
+      })),
+      currentPlayer: G.currentPlayer,
+      round: G.round,
+      phase: G.phase,
+      deckCount: G.deck.length,
+      discard: G.discard.map(c => ({name:c.name, type:c.type, value:c.value})),
+      log: G.log.slice(-10),
+      myId: playerId,
+      yourHand: G.players[playerId].hand.map(c => ({name:c.name, type:c.type, value:c.value, desc:c.desc}))
+    };
+  },
+
+  /* 广播回合结束 */
+  broadcastRoundEnd(winner, reason, winMode){
+    MP.broadcast({type:'roundEnd', winner:winner ? winner.name : null, reason:reason, winMode:winMode, winnerId: winner ? winner.id : -1});
+  },
+
+  /* 广播游戏结束 */
+  broadcastGameEnd(winnerName){
+    MP.broadcast({type:'gameEnd', winnerName:winnerName});
+  },
+};
+
+/* ===== 客户端：网络游戏管理 ===== */
+const NetClient = {
+  myId: 0,
+  myName: '',
+  tokensNeeded: 7,
+  state: null,
+  phase: 'wait', // 'wait', 'draw', 'play', 'target', 'guess'
+  canPlay: false, // 是否轮到本客户端出牌
+  selectedCard: null, // 本客户端本地选中的手牌索引
+
+  onGameStart(data){
+    this.myId = data.yourId !== undefined ? data.yourId : 1;
+    this.tokensNeeded = data.tokensNeeded;
+    // 切换到游戏场景
+    showScene('game');
+    // 初始化空游戏状态
+    G = {
+      players: data.players.map(p => ({
+        id:p.id, name:p.name, charName:p.charName, avatar:p.avatar,
+        isAI:p.isAI, alive:p.alive, tokens:p.tokens, hand:[], protection:false
+      })),
+      deck:[], discard:[], hiddenCard:null,
+      currentPlayer:0, round:1, phase:'menu',
+      selectedCard:null, tokensNeeded:data.tokensNeeded, log:[],
+      playedThisRound:[], isOnline:true, isClient:true,
+      myPlayerId: this.myId
+    };
+    renderAll();
+    showTurnIndicator('游戏开始！');
+  },
+
+  onState(data){
+    this.state = data;
+    // 更新本地 G 对象
+    if(!G || !G.isClient) return;
+    G.players = data.players.map(p => {
+      const existing = G.players.find(ep => ep.id === p.id) || {};
+      return {...existing, ...p, hand: p.id === this.myId ? (data.yourHand || []) : []};
+    });
+    G.currentPlayer = data.currentPlayer;
+    G.round = data.round;
+    G.phase = data.phase;
+    G.discard = data.discard || [];
+    G.selectedCard = data.selectedCard;
+    G.log = data.log || [];
+    G.tokensNeeded = this.tokensNeeded;
+    // deck 只需要长度
+    G.deck = new Array(data.deckCount || 0);
+    // 收到新状态表示回合推进，清除本地出牌交互
+    this.canPlay = false;
+    this.selectedCard = null;
+    // 关闭可能残留的抽牌/操作面板
+    const panel = document.getElementById('action-panel');
+    if(panel) panel.classList.remove('show');
+    renderAll();
+  },
+
+  onYourTurn(data){
+    this.phase = data.phase;
+    // 更新状态（onState 会把 canPlay 置为 false）
+    this.onState(data.state);
+    if(data.phase === 'draw'){
+      this.showDrawButton();
+    } else if(data.phase === 'play'){
+      // 轮到本客户端出牌：启用 #player-hand 交互
+      this.canPlay = true;
+      this.selectedCard = null;
+      renderAll();
+      showTurnIndicator('轮到你出牌');
+    }
+  },
+
+  onActionRequest(data){
+    this.onState(data.state);
+    if(data.prompt === 'target'){
+      this.showTargetSelection(data);
+    } else if(data.prompt === 'guess'){
+      this.showGuessSelection();
+    } else if(data.prompt === 'countess'){
+      showModal('必须打出女官', data.msg || '你同时持有女官和皇帝/皇子，必须打出女官！', null);
+      MP.sendToHost({type:'action', action:'ack'});
+    }
+  },
+
+  onLog(data){
+    if(data.msg) log('event', data.msg);
+  },
+
+  onTurnIndicator(data){
+    showTurnIndicator(`${data.name} 的回合`);
+  },
+
+  onRoundEnd(data){
+    const msg = data.winMode === 'eliminate'
+      ? `${data.winner} 获胜！其他玩家被淘汰。`
+      : `${data.winner} 获胜！牌库耗尽，比点数决胜。`;
+    showModal('回合结束', msg, () => {
+      // 等待下一回合
+    });
+  },
+
+  onGameEnd(data){
+    // 客户端也显示结局动画
+    showFinale(data.winnerName);
+  },
+
+  /* 客户端 UI：抽牌按钮 */
+  showDrawButton(){
+    const panel = document.getElementById('action-panel');
+    if(!panel) return;
+    panel.innerHTML = '<button class="menu-btn start-btn" onclick="NetClient.doDraw()">抽 牌</button>';
+    panel.classList.add('show');
+  },
+
+  /* 客户端执行抽牌 */
+  doDraw(){
+    document.getElementById('action-panel').classList.remove('show');
+    MP.sendToHost({type:'action', action:'draw'});
+    this.phase = 'wait';
+  },
+
+  /* 客户端选牌（使用统一的 #player-hand / #player-action） */
+  selectCard(idx){
+    if(!this.canPlay) return;
+    const me = G.players.find(p => p.id === this.myId);
+    if(!me) return;
+    // 伯爵夫人检查
+    const hasCountess = me.hand.some(c => c.value === 7);
+    const hasKingOrPrince = me.hand.some(c => c.value === 5 || c.value === 6);
+    if(hasCountess && hasKingOrPrince && me.hand[idx].value !== 7){
+      showModal('必须打出女官', '你同时持有女官和皇帝/皇子，必须打出女官！', null);
+      return;
+    }
+    this.selectedCard = idx;
+    renderHand();
+  },
+
+  /* 客户端取消选牌 */
+  cancelSelect(){
+    this.selectedCard = null;
+    renderHand();
+  },
+
+  /* 客户端确认出牌 */
+  confirmPlay(){
+    if(!this.canPlay || this.selectedCard === null) return;
+    const idx = this.selectedCard;
+    this.canPlay = false;
+    this.selectedCard = null;
+    renderHand();
+    MP.sendToHost({type:'action', action:'play', cardIdx:idx});
+    this.phase = 'wait';
+  },
+
+  /* 客户端 UI：目标选择 */
+  showTargetSelection(data){
+    const panel = document.getElementById('action-panel');
+    if(!panel) return;
+    let html = '<div style="text-align:center;color:var(--gold);margin-bottom:10px;">选择目标</div><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">';
+    data.targets.forEach((tid, i) => {
+      const p = G.players.find(p => p.id === tid);
+      if(!p) return;
+      html += `<button class="menu-btn" onclick="NetClient.selectTarget(${tid})" style="min-width:100px;">${p.name}</button>`;
+    });
+    html += '</div>';
+    panel.innerHTML = html;
+    panel.classList.add('show');
+  },
+
+  /* 客户端选择目标 */
+  selectTarget(tid){
+    document.getElementById('action-panel').classList.remove('show');
+    MP.sendToHost({type:'action', action:'target', targetId:tid});
+    this.phase = 'wait';
+  },
+
+  /* 客户端 UI：猜测选择（卫兵） */
+  showGuessSelection(){
+    const panel = document.getElementById('action-panel');
+    if(!panel) return;
+    const guessable = Object.values(CARD_DEFS).filter(c => c.value > 1);
+    let html = '<div style="text-align:center;color:var(--gold);margin-bottom:10px;">猜测目标手牌（不能猜金吾卫）</div><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">';
+    guessable.forEach(c => {
+      html += `<button class="menu-btn" onclick="NetClient.selectGuess('${c.type}')" style="min-width:80px;font-size:0.85rem;">${c.name}</button>`;
+    });
+    html += '</div>';
+    panel.innerHTML = html;
+    panel.classList.add('show');
+  },
+
+  /* 客户端选择猜测 */
+  selectGuess(guess){
+    document.getElementById('action-panel').classList.remove('show');
+    MP.sendToHost({type:'action', action:'guess', guess:guess});
+    this.phase = 'wait';
+  },
+};
+
+/* ===== 修改 nextPlayer 以支持远程玩家 ===== */
+const _origNextPlayer = nextPlayer;
+nextPlayer = function(){
+  const anyAlive = G.players.some(p => p.alive);
+  if(!anyAlive){ endRound(); return; }
+  let next = (G.currentPlayer + 1) % G.players.length;
+  while(!G.players[next].alive){
+    next = (next + 1) % G.players.length;
+  }
+  G.currentPlayer = next;
+  G.phase = 'draw';
+  G.players[next].protection = false;
+
+  renderAll();
+  const pName = G.players[next].name;
+  showTurnIndicator(`${pName} 的回合`);
+
+  if(G.isOnline && !G.isClient){
+    // 房主模式：广播状态
+    NetHost.broadcastTurnIndicator(pName);
+  }
+
+  setTimeout(() => {
+    if(G.players[next].isAI){
+      aiTurn();
+    } else if(G.players[next].isRemote){
+      // 远程玩家：走网络流程
+      if(G.isOnline && !G.isClient){
+        NetHost.remoteTurn(next);
+      }
+    } else if(G.isClient){
+      // 客户端模式：等待房主指示
+    } else {
+      playerDraw();
+    }
+  }, 1500);
+};
+
+/* ===== 修改 playerDraw 以支持联机 ===== */
+const _origPlayerDraw = playerDraw;
+playerDraw = function(){
+  if(G.isClient) return; // 客户端不主动抽牌
+  if(G.isOnline){
+    const player = G.players[G.currentPlayer];
+    if(player.isRemote){
+      // 远程玩家回合（startRound 直接调用 playerDraw 的情况）
+      if(!G.isClient){ NetHost.remoteTurn(G.currentPlayer); }
+      return;
+    }
+    // 房主自己抽牌后广播状态
+    _origPlayerDraw();
+    NetHost.broadcastState();
+  } else {
+    _origPlayerDraw();
+  }
+};
+
+/* ===== 修改 startRound 以支持联机广播 ===== */
+const _origStartRound = startRound;
+startRound = function(){
+  _origStartRound();
+  if(G.isOnline && !G.isClient){
+    setTimeout(() => NetHost.broadcastState(), 100);
+  }
+};
+
+/* ===== 修改 endRound 以广播结果（不重复加 token） ===== */
+const _origEndRound = endRound;
+endRound = function(){
+  // 在原函数执行前记录赢家信息用于广播
+  if(G.isOnline && !G.isClient){
+    const alive = G.players.filter(p => p.alive);
+    let winner = null;
+    let winMode = 'eliminate';
+    if(alive.length === 1){
+      winner = alive[0];
+    } else if(alive.length > 1 && G.deck.length === 0){
+      winMode = 'compare';
+      alive.sort((a,b) => {
+        const av = a.hand[0] ? a.hand[0].value : 0;
+        const bv = b.hand[0] ? b.hand[0].value : 0;
+        return bv - av;
+      });
+      winner = alive[0];
+    }
+    if(winner){
+      const reason = winMode === 'eliminate' ? '淘汰获胜' : '牌库耗尽，比点数决胜';
+      NetHost.broadcastRoundEnd(winner, reason, winMode);
+    }
+  }
+  _origEndRound();
+};
+
+/* ===== 修改 showFinale 以广播给客户端 ===== */
+const _origShowFinale = showFinale;
+showFinale = function(winnerName){
+  if(G.isOnline && !G.isClient){
+    NetHost.broadcastGameEnd(winnerName);
+  }
+  _origShowFinale(winnerName);
+};
+
+/* ===== 修改 confirmPlay 以广播状态 ===== */
+const _origConfirmPlay = confirmPlay;
+confirmPlay = function(){
+  if(G.isOnline && !G.isClient){
+    _origConfirmPlay();
+  } else if(!G.isOnline){
+    _origConfirmPlay();
+  }
+};
+
+/* ===== 修改 afterPlay 中间插入广播 ===== */
+const _origAfterPlay = afterPlay;
+afterPlay = function(playerId){
+  if(G.isOnline && !G.isClient){
+    NetHost.broadcastState();
+  }
+  _origAfterPlay(playerId);
+};
+
+/* ===== 场景切换辅助 ===== */
+function showScene(id){
+  document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('scene-' + id);
+  if(el) el.classList.add('active');
+}
+
+/* ===== 根据 stage 实际大小和 canvas 设计尺寸计算 scale ===== */
+function scaleCanvas(){
+  const stage = document.getElementById('stage');
+  const canvas = document.getElementById('canvas');
+  if(!stage || !canvas) return;
+  const sw = stage.clientWidth;
+  const sh = stage.clientHeight;
+  const cw = canvas.offsetWidth;   // 设计稿宽（CSS 设置的）
+  const ch = canvas.offsetHeight;  // 设计稿高
+  const s = Math.min(sw / cw, sh / ch);
+  canvas.style.transform = 'scale(' + s + ')';
+}
+
+/* ===== 布局切换：16:9 ↔ 9:16 ===== */
+function toggleLayout(){
+  const body = document.body;
+  const btn = document.getElementById('layout-toggle');
+  const is16x9 = body.classList.contains('layout-16-9');
+  body.classList.remove('layout-16-9','layout-9-16');
+  if(is16x9){
+    body.classList.add('layout-9-16');
+    if(btn) btn.innerHTML = '⛶ 横版';
+  } else {
+    body.classList.add('layout-16-9');
+    if(btn) btn.innerHTML = '⛶ 竖版';
+  }
+  // 下一帧重新计算 scale（CSS 切换后 canvas 宽高会变）
+  requestAnimationFrame(() => {
+    scaleCanvas();
+    // 如已打开游戏内布局位置修正（renderOpponents），重新定位对手
+    if(typeof renderOpponents === 'function' && typeof Game !== 'undefined' && Game.state && Game.state.phase === 'playing'){
+      renderOpponents();
+    }
+  });
+}
+
+/* ===== 初始化 ===== */
+window.addEventListener('DOMContentLoaded', () => {
+  AudioSystem.playBgm('menu');
+  // 绑定音频控制面板的所有交互（总开关/BGM/配音/音效 独立开关 + 音量滑块）
+  AudioSystem.bindPanelUI();
+  // 把 finale-overlay 移到 body 下，避免被 #scene-game 的 display:none 影响
+  const fo = document.getElementById('finale-overlay');
+  if(fo && fo.parentElement !== document.body){ document.body.appendChild(fo); }
+  // 同步布局按钮初始文本（按钮显示「点击后切换到的布局」）
+  const btn = document.getElementById('layout-toggle');
+  if(btn){
+    if(document.body.classList.contains('layout-16-9')){ btn.innerHTML = '⛶ 竖版'; }
+    else { btn.innerHTML = '⛶ 横版'; }
+  }
+  // 初始 scale 并绑定 resize
+  scaleCanvas();
+  let t;
+  window.addEventListener('resize', () => {
+    clearTimeout(t);
+    t = setTimeout(scaleCanvas, 50);
+  });
+  // URL 中带 room 参数时，自动跳到联机大厅并预填房间号
+  const params = new URLSearchParams(location.search);
+  const roomParam = params.get('room');
+  if(roomParam){
+    showScene('mp-lobby');
+    const input = document.getElementById('mp-room-input');
+    if(input){ input.value = roomParam.toUpperCase(); }
+    const form = document.getElementById('mp-join-form');
+    if(form){ form.style.display = 'block'; }
+  }
+});
+</script>
+</body>
+</html>
