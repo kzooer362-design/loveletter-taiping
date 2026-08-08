@@ -2,13 +2,66 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>情书：掌上明珠</title>
 <link rel="icon" href="assets/ui/icon.png">
 <style>
 /* ===== 全局重置 ===== */
 *{margin:0;padding:0;box-sizing:border-box;text-align:left;}
 html,body{width:100%;height:100%;overflow:hidden;font-family:"Microsoft YaHei","Segoe UI",sans-serif;user-select:none;}
+/* iOS Safari 100vh 修正：用 -webkit-fill-available 避免 地址栏收缩导致高度跳变 */
+html,body{height:100vh;height:-webkit-fill-available;}
+#app{height:100vh;height:-webkit-fill-available;}
+
+/* ===== 首屏 Loading 预加载界面 ===== */
+#loading-screen{
+  position:fixed;inset:0;z-index:9999;
+  background:radial-gradient(ellipse at 50% 40%,var(--purple) 0%,var(--purple-deep) 50%,var(--bg-dark) 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  color:var(--text-light);text-align:center;padding:24px;
+}
+#loading-screen.hidden{display:none;}
+#loading-screen .ls-title{
+  font-size:clamp(28px,5vw,56px);font-weight:bold;letter-spacing:6px;
+  color:var(--gold);margin-bottom:12px;text-shadow:0 2px 12px rgba(0,0,0,0.6);
+}
+#loading-screen .ls-sub{
+  font-size:clamp(13px,2.4vw,18px);color:var(--text-dim);
+  margin-bottom:36px;letter-spacing:2px;
+}
+#loading-screen .ls-bar-wrap{
+  width:min(80vw,560px);height:14px;border-radius:8px;
+  background:rgba(0,0,0,0.45);border:2px solid var(--gold-dim);
+  overflow:hidden;box-shadow:0 0 24px rgba(212,175,55,0.25);
+}
+#loading-screen .ls-bar{
+  width:0%;height:100%;border-radius:6px;
+  background:linear-gradient(90deg,var(--gold-dim),var(--gold),#f4e4a6);
+  transition:width .25s ease;
+}
+#loading-screen .ls-percent{
+  margin-top:14px;font-size:clamp(16px,3vw,24px);color:var(--gold);font-weight:bold;
+}
+#loading-screen .ls-status{
+  margin-top:8px;font-size:clamp(11px,2vw,14px);color:var(--text-dim);
+  min-height:18px;word-break:break-all;
+}
+#loading-screen .ls-tip{
+  margin-top:28px;font-size:clamp(11px,2vw,13px);color:var(--text-dim);
+  max-width:480px;line-height:1.7;opacity:0.8;
+}
+#loading-screen .ls-enter-btn{
+  margin-top:28px;padding:14px 56px;font-size:clamp(16px,3vw,22px);
+  border-radius:14px;border:3px solid var(--gold);
+  background:linear-gradient(180deg,rgba(212,175,55,0.25),rgba(74,44,94,0.6));
+  color:var(--gold);font-weight:bold;letter-spacing:4px;cursor:pointer;
+  display:none;animation:lsPulse 1.8s ease-in-out infinite;
+}
+#loading-screen .ls-enter-btn.show{display:inline-block;}
+@keyframes lsPulse{
+  0%,100%{box-shadow:0 0 16px rgba(212,175,55,0.35);}
+  50%{box-shadow:0 0 36px rgba(212,175,55,0.7);}
+}
 
 /* ===== 主题变量 ===== */
 :root{
@@ -719,11 +772,55 @@ body.layout-9-16 .finale-winner-line,body.layout-9-16 .finale-princess-line{font
 body.layout-9-16 .finale-dialogue-wrap{gap:16px;width:720px;margin:12px auto;}
 body.layout-9-16 .finale-epilogue-text{font-size:20px;line-height:2;margin:20px auto;max-width:720px;}
 body.layout-9-16 .finale-btn{padding:16px 46px;font-size:22px;border-radius:12px;border-width:3px;}
+
+/* ===== 竖版字号放大（移动端可读性增强，叠加在 scale 1.25 之上） ===== */
+body.layout-9-16 #round-info{font-size:28px;}
+body.layout-9-16 .top-btn{font-size:22px;padding:12px 22px;}
+body.layout-9-16 .opp-name{font-size:24px;}
+body.layout-9-16 .opp-protection{font-size:18px;padding:8px 16px;}
+body.layout-9-16 .player-shield{font-size:20px;padding:8px 18px;}
+body.layout-9-16 .deck-label,body.layout-9-16 .discard-label{font-size:22px;}
+body.layout-9-16 #deck-count{font-size:22px;}
+body.layout-9-16 #game-log{font-size:20px;}
+body.layout-9-16 #game-log h3{font-size:24px;}
+body.layout-9-16 #game-log .log-entry{font-size:19px;line-height:28px;}
+body.layout-9-16 #player-label{font-size:24px;}
+body.layout-9-16 .action-info{font-size:24px;}
+body.layout-9-16 .action-desc{font-size:22px;max-width:420px;}
+body.layout-9-16 .play-btn,body.layout-9-16 .cancel-btn{font-size:24px;padding:12px 28px;}
+body.layout-9-16 .hand-card .hc-rank{font-size:36px;}
+body.layout-9-16 .hand-card .hc-name{font-size:22px;}
+body.layout-9-16 .setup-content h2{font-size:54px;}
+body.layout-9-16 .pc-btn{font-size:54px;}
+body.layout-9-16 .pc-btn span{font-size:20px;}
+body.layout-9-16 .diff-btn{font-size:28px;}
+body.layout-9-16 .start-btn{font-size:36px;}
+body.layout-9-16 .back-btn{font-size:22px;width:260px;padding:14px;}
+body.layout-9-16 .char-cell .cc-name{font-size:1.5rem;}
+body.layout-9-16 .char-cell .cc-val{font-size:1.15rem;}
+body.layout-9-16 .char-cell .cc-desc{font-size:1.05rem;line-height:1.7;}
+body.layout-9-16 .modal-content h2{font-size:36px;}
+body.layout-9-16 .modal-content p{font-size:24px;}
+body.layout-9-16 .modal-btn{font-size:24px;}
+body.layout-9-16 .target-btn{font-size:24px;}
+body.layout-9-16 .target-hint{font-size:20px;}
+body.layout-9-16 .finale-epilogue-text{font-size:24px;line-height:2.1;}
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body class="layout-16-9">
+
+<!-- 首屏 Loading 预加载界面 -->
+<div id="loading-screen">
+  <div class="ls-title">情书 · 掌上明珠</div>
+  <div class="ls-sub">正在筹备喜堂，请稍候…</div>
+  <div class="ls-bar-wrap"><div class="ls-bar" id="ls-bar"></div></div>
+  <div class="ls-percent" id="ls-percent">0%</div>
+  <div class="ls-status" id="ls-status">准备中…</div>
+  <button class="ls-enter-btn" id="ls-enter-btn">进入游戏</button>
+  <div class="ls-tip">首次加载需下载全部音画资源，建议在 Wi-Fi 环境下进行。加载完成后即可离线游玩。</div>
+</div>
 
 <div id="app">
   <div id="stage-wrap">
@@ -4380,7 +4477,10 @@ function scaleCanvas(){
   const sh = stage.clientHeight;
   const cw = canvas.offsetWidth;   // 设计稿宽（CSS 设置的）
   const ch = canvas.offsetHeight;  // 设计稿高
-  const s = Math.min(sw / cw, sh / ch);
+  let s = Math.min(sw / cw, sh / ch);
+  if(document.body.classList.contains('layout-9-16')){
+    s *= 1.25;
+  }
   canvas.style.transform = 'scale(' + s + ')';
 }
 
@@ -4407,37 +4507,117 @@ function toggleLayout(){
   });
 }
 
+/* ===== 移动端检测 ===== */
+function isMobileDevice(){
+  return /Android|iPhone|iPad|iPod|Mobile|Windows Phone|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent)
+    || ('ontouchstart' in window && window.matchMedia('(pointer:coarse)').matches);
+}
+
+const PRELOAD_IMAGES = [
+  'assets/ui/icon.png','assets/ui/cover.png','assets/ui/token.png',
+  'assets/ui/icon1.png','assets/ui/icon2.png','assets/ui/icon3.png','assets/ui/icon4.png','assets/ui/icon5.png',
+  'picture/1卫兵.png','picture/2神父.png','picture/3男爵1.png','picture/3男爵2.png',
+  'picture/4女仆1.png','picture/4女仆2.png','picture/5王子1.png','picture/5王子2.png',
+  'picture/6国王.png','picture/7伯爵夫人.png','picture/8公主.png','picture/back.png',
+  'picture/wedding/wedding.png','picture/wedding/princess.png','picture/wedding/wedding_flower.png',
+  'picture/wedding/su.png','picture/wedding/cui.png','picture/wedding/wu.png','picture/wedding/gao.png','picture/wedding/hui.png'
+];
+
+function preloadImage(src){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve({src, ok:true});
+    img.onerror = () => resolve({src, ok:false});
+    img.src = src;
+  });
+}
+
+async function startPreload(){
+  const bar = document.getElementById('ls-bar');
+  const pct = document.getElementById('ls-percent');
+  const status = document.getElementById('ls-status');
+  const enterBtn = document.getElementById('ls-enter-btn');
+  const total = PRELOAD_IMAGES.length;
+  let done = 0;
+  const concurrency = 6;
+  let idx = 0;
+  async function worker(){
+    while(idx < total){
+      const cur = idx++;
+      const r = await preloadImage(PRELOAD_IMAGES[cur]);
+      done++;
+      const p = Math.round(done / total * 100);
+      if(bar) bar.style.width = p + '%';
+      if(pct) pct.textContent = p + '%';
+      if(status) status.textContent = (r.ok ? '已加载：' : '缺失(跳过)：') + r.src;
+    }
+  }
+  await Promise.all(Array.from({length:concurrency}, () => worker()));
+  if(status) status.textContent = '资源就绪，可以开始了';
+  if(enterBtn){ enterBtn.classList.add('show'); }
+  registerSW();
+}
+
+function enterGame(){
+  const ls = document.getElementById('loading-screen');
+  if(ls) ls.classList.add('hidden');
+  AudioSystem.playBgm('menu');
+  scaleCanvas();
+}
+
+function registerSW(){
+  if(!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      console.log('[SW] 注册成功', reg.scope);
+    }).catch(err => {
+      console.warn('[SW] 注册失败（不影响游戏）', err);
+    });
+  });
+}
+
 /* ===== 初始化 ===== */
 window.addEventListener('DOMContentLoaded', () => {
-  AudioSystem.playBgm('menu');
-  // 绑定音频控制面板的所有交互（总开关/BGM/配音/音效 独立开关 + 音量滑块）
   AudioSystem.bindPanelUI();
-  // 把 finale-overlay 移到 body 下，避免被 #scene-game 的 display:none 影响
   const fo = document.getElementById('finale-overlay');
   if(fo && fo.parentElement !== document.body){ document.body.appendChild(fo); }
-  // 同步布局按钮初始文本（按钮显示「点击后切换到的布局」）
+
+  if(isMobileDevice()){
+    document.body.classList.remove('layout-16-9');
+    document.body.classList.add('layout-9-16');
+    const layoutBtn = document.getElementById('layout-toggle');
+    if(layoutBtn){ layoutBtn.style.display = 'none'; }
+  }
+
   const btn = document.getElementById('layout-toggle');
-  if(btn){
+  if(btn && btn.style.display !== 'none'){
     if(document.body.classList.contains('layout-16-9')){ btn.innerHTML = '⛶ 竖版'; }
     else { btn.innerHTML = '⛶ 横版'; }
   }
-  // 初始 scale 并绑定 resize
+
   scaleCanvas();
   let t;
   window.addEventListener('resize', () => {
     clearTimeout(t);
     t = setTimeout(scaleCanvas, 50);
   });
-  // URL 中带 room 参数时，自动跳到联机大厅并预填房间号
+  window.addEventListener('orientationchange', () => {
+    setTimeout(scaleCanvas, 300);
+  });
+
   const params = new URLSearchParams(location.search);
   const roomParam = params.get('room');
   if(roomParam){
     showScene('mp-lobby');
-    const input = document.getElementById('mp-room-input');
+    const input = document.getElementById('mp-room-input') || document.getElementById('mp-room-input-lan');
     if(input){ input.value = roomParam.toUpperCase(); }
-    const form = document.getElementById('mp-join-form');
+    const form = document.getElementById('mp-join-form') || document.getElementById('mp-join-form-lan');
     if(form){ form.style.display = 'block'; }
   }
+
+  startPreload();
+  const enterBtn = document.getElementById('ls-enter-btn');
+  if(enterBtn){ enterBtn.addEventListener('click', enterGame); }
 });
 </script>
 </body>
