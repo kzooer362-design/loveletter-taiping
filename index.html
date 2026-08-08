@@ -149,10 +149,23 @@ body.layout-9-16 #audio-toggle{width:44px;height:44px;font-size:22px;}
 .player-count-btns{display:flex;gap:20px;justify-content:center;margin-bottom:30px;}
 .pc-btn{width:100px;height:100px;border-radius:50%;border:3px solid var(--gold-dim);background:var(--bg-card);color:var(--gold);font-size:2rem;cursor:pointer;transition:all .3s;display:flex;align-items:center;justify-content:center;flex-direction:column;}
 .pc-btn span{font-size:0.7rem;margin-top:4px;color:var(--text-dim);}
-.pc-btn:hover,.pc-btn.selected{border-color:var(--gold);background:var(--purple);box-shadow:0 0 20px rgba(212,175,55,0.4);}
+.pc-btn:hover{border-color:var(--gold);background:var(--purple);box-shadow:0 0 16px rgba(212,175,55,0.3);}
+.pc-btn.selected{
+  border-color:var(--gold);border-width:4px;
+  background:linear-gradient(135deg,rgba(212,175,55,0.35),var(--purple));
+  box-shadow:0 0 28px rgba(212,175,55,0.6),inset 0 0 16px rgba(212,175,55,0.15);
+  transform:scale(1.08);
+}
+.pc-btn.selected span{color:var(--gold);font-weight:bold;}
 .diff-btns{display:flex;gap:15px;justify-content:center;margin-bottom:30px;}
 .diff-btn{padding:10px 30px;border:2px solid var(--gold-dim);background:var(--bg-card);color:var(--text-light);border-radius:6px;cursor:pointer;transition:all .2s;font-size:0.95rem;}
-.diff-btn:hover,.diff-btn.selected{border-color:var(--gold);color:var(--gold);background:var(--purple);}
+.diff-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--purple);}
+.diff-btn.selected{
+  border-color:var(--gold);border-width:3px;color:#fff;font-weight:bold;
+  background:linear-gradient(135deg,rgba(212,175,55,0.4),var(--purple));
+  box-shadow:0 0 24px rgba(212,175,55,0.55),inset 0 0 12px rgba(212,175,55,0.15);
+  transform:scale(1.06);
+}
 .start-btn{padding:14px 50px;font-size:1.2rem;}
 
 /* ===== 游戏场景 ===== */
@@ -3123,6 +3136,9 @@ function showSetup(){
     s.classList.remove('active');
   }
   document.getElementById('scene-setup').classList.add('active');
+  // 同步默认选中状态（防止进入页面时看不出哪个被选中）
+  selectPlayerCount(selectedPlayerCount);
+  selectDifficulty(selectedDifficulty);
 }
 
 function showRules(){
@@ -4477,10 +4493,7 @@ function scaleCanvas(){
   const sh = stage.clientHeight;
   const cw = canvas.offsetWidth;   // 设计稿宽（CSS 设置的）
   const ch = canvas.offsetHeight;  // 设计稿高
-  let s = Math.min(sw / cw, sh / ch);
-  if(document.body.classList.contains('layout-9-16')){
-    s *= 1.25;
-  }
+  const s = Math.min(sw / cw, sh / ch);
   canvas.style.transform = 'scale(' + s + ')';
 }
 
